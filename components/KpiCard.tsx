@@ -1,0 +1,62 @@
+"use client";
+
+import { ReactNode } from "react";
+
+interface Props {
+  label: string;
+  value: string | number;
+  subtitle?: string;
+  icon?: ReactNode;
+  highlight?: boolean; // dominant KPI (closed-loop effectiveness)
+  variant?: "default" | "warning" | "success";
+}
+
+export function KpiCard({
+  label,
+  value,
+  subtitle,
+  icon,
+  highlight = false,
+  variant = "default",
+}: Props) {
+  const borderColor = highlight
+    ? "border-teal-500"
+    : variant === "warning"
+    ? "border-amber-700"
+    : variant === "success"
+    ? "border-emerald-700"
+    : "border-slate-700";
+
+  const valueColor = highlight
+    ? "text-teal-300"
+    : variant === "warning"
+    ? "text-amber-300"
+    : variant === "success"
+    ? "text-emerald-300"
+    : "text-white";
+
+  const bgColor = highlight ? "bg-teal-950/60" : "bg-slate-800/60";
+
+  return (
+    <div
+      className={`rounded-xl border ${borderColor} ${bgColor} p-5 flex flex-col gap-2 ${
+        highlight ? "ring-1 ring-teal-500/30" : ""
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <span className="text-xs font-medium uppercase tracking-widest text-slate-400">
+          {label}
+        </span>
+        {icon && <span className="text-slate-500">{icon}</span>}
+      </div>
+
+      <div className={`text-4xl font-bold tabular-nums ${valueColor}`}>
+        {value}
+      </div>
+
+      {subtitle && (
+        <p className="text-xs text-slate-500 leading-snug">{subtitle}</p>
+      )}
+    </div>
+  );
+}
