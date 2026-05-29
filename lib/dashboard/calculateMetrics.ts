@@ -10,6 +10,8 @@ import {
   DashboardMetrics,
   UnitSummary,
   TimeSeriesPoint,
+  TemporalBucket,
+  ResponsivenessAnalysis,
 } from "./types";
 import { parseDate } from "./applyFilters";
 
@@ -122,6 +124,25 @@ function isAcuteDecompensation(record: PatientRecord): boolean {
 function isDeteriorationReversal(record: PatientRecord): boolean {
   // Acute case with a favorable outcome = clinical deterioration reversed
   return isAcuteDecompensation(record) && isFavorableOutcome(record);
+}
+
+/**
+ * Whether the unit responded effectively to this record.
+ *
+ * Priority:
+ *   1. The spreadsheet's own "efetividade" flag (1 / 0) when present.
+ *   2. Fallback: a documented unit action that led to a favorable outcome.
+ */
+function isEffectiveResponse(record: PatientRecord): boolean {
+  const flag = normalize(record.effectiveness_flag as string | null | undefined);
+  if (flag === "1" || flag === "sim" || flag === "yes" || flag === "true") {
+    return true;
+  }
+  if (flag === "0" || flag === "nao" || flag === "no" || flag === "false") {
+    return false;
+  }
+  // No usable flag — fall back to outcome-based heuristic
+  return hasUnitAction(record) && isFavorableOutcome(record);
 }
 
 // ---------------------------------------------------------------------------
@@ -283,4 +304,266 @@ export function buildTimeSeries(
   }
 
   return points.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// ---------------------------------------------------------------------------
+// Temporal responsiveness analysis — WHEN does the loop break / respond best
+// ---------------------------------------------------------------------------
+
+const SHIFT_ORDER = ["MANHÃ", "TARDE", "NOITE", "MADRUGADA"];
+const DOW_LABELS = [
+  "Domingo",
+  "Segunda",
+  "Terça",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sábado",
+];
+// Display order: weekdays first, weekend last (operational reading)
+const DOW_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const HOUR_BANDS: [string, number, number][] = [
+  ["00–03h", 0, 3],
+  ["04–07h", 4, 7],
+  ["08–11h", 8, 11],
+  ["12–15h", 12, 15],
+  ["16–19h", 16, 19],
+  ["20–23h", 20, 23],
+];
+
+const WEEKEND_LABELS = new Set(["Sábado", "Domingo"]);
+
+function pct(part: number, total: number): number {
+  return total > 0 ? Math.round((part / total) * 100) : 0;
+}
+
+/** Derive the work shift from the explicit column, falling back to the hour. */
+function getShift(record: PatientRecord): string | null {
+  const raw = normalize(record.shift as string | null | undefined);
+  if (raw) {
+    if (raw.startsWith("manh")) return "MANHÃ";
+    if (raw.startsWith("tard")) return "TARDE";
+    if (raw.startsWith("noit")) return "NOITE";
+    if (raw.startsWith("madrug")) return "MADRUGADA";
+  }
+  const hour = getHour(record);
+  if (hour === null) return null;
+  if (hour >= 6 && hour <= 11) return "MANHÃ";
+  if (hour >= 12 && hour <= 17) return "TARDE";
+  if (hour >= 18 && hour <= 23) return "NOITE";
+  return "MADRUGADA";
+}
+
+/** Extract the hour (0–23) from the event-time column ("HH:MM:SS"). */
+function getHour(record: PatientRecord): number | null {
+  const raw = String(record.event_time ?? "").trim();
+  const m = raw.match(/^(\d{1,2}):/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  return h >= 0 && h <= 23 ? h : null;
+}
+
+/** Day of week (0=Sun..6=Sat) derived from the record date. */
+function getDayOfWeek(record: PatientRecord): number | null {
+  const iso = parseDate(record.date);
+  if (!iso) return null;
+  const d = new Date(`${iso}T00:00:00`);
+  return isNaN(d.getTime()) ? null : d.getDay();
+}
+
+/** Build a bucket from a set of records. */
+function makeBucket(label: string, recs: PatientRecord[]): TemporalBucket {
+  const total = recs.length;
+  const noReturn = recs.filter(isNoReturn).length;
+  const effective = recs.filter(isEffectiveResponse).length;
+  return {
+    label,
+    total,
+    noReturn,
+    noReturnRate: pct(noReturn, total),
+    effective,
+    effectiveRate: pct(effective, total),
+  };
+}
+
+/**
+ * Pick the bucket with the highest value of `metric`, ignoring tiny buckets
+ * (below `minTotal`) so a 2-record outlier never dominates the narrative.
+ */
+function pickExtreme(
+  buckets: TemporalBucket[],
+  metric: (b: TemporalBucket) => number,
+  minTotal: number,
+  direction: "max" | "min"
+): TemporalBucket | null {
+  const eligible = buckets.filter((b) => b.total >= minTotal);
+  if (eligible.length === 0) return null;
+  return eligible.reduce((best, b) => {
+    const cmp = metric(b) - metric(best);
+    return (direction === "max" ? cmp > 0 : cmp < 0) ? b : best;
+  });
+}
+
+export function calculateResponsiveness(
+  records: PatientRecord[]
+): ResponsivenessAnalysis {
+  const total = records.length;
+
+  // Group records by each temporal dimension
+  const shiftGroups = new Map<string, PatientRecord[]>();
+  const dowGroups = new Map<number, PatientRecord[]>();
+  const bandGroups = new Map<string, PatientRecord[]>();
+
+  let hasShiftData = false;
+  let hasTimeData = false;
+
+  for (const r of records) {
+    const shift = getShift(r);
+    if (shift) {
+      hasShiftData = true;
+      (shiftGroups.get(shift) ?? shiftGroups.set(shift, []).get(shift)!).push(r);
+    }
+
+    const dow = getDayOfWeek(r);
+    if (dow !== null) {
+      (dowGroups.get(dow) ?? dowGroups.set(dow, []).get(dow)!).push(r);
+    }
+
+    const hour = getHour(r);
+    if (hour !== null) {
+      hasTimeData = true;
+      const band = HOUR_BANDS.find(([, lo, hi]) => hour >= lo && hour <= hi);
+      if (band) {
+        const key = band[0];
+        (bandGroups.get(key) ?? bandGroups.set(key, []).get(key)!).push(r);
+      }
+    }
+  }
+
+  const available = total > 0 && (hasShiftData || hasTimeData);
+
+  const byShift = SHIFT_ORDER.filter((s) => shiftGroups.has(s)).map((s) =>
+    makeBucket(s, shiftGroups.get(s)!)
+  );
+  const byDayOfWeek = DOW_DISPLAY_ORDER.filter((d) => dowGroups.has(d)).map((d) =>
+    makeBucket(DOW_LABELS[d], dowGroups.get(d)!)
+  );
+  const byHourBand = HOUR_BANDS.filter(([k]) => bandGroups.has(k)).map(([k]) =>
+    makeBucket(k, bandGroups.get(k)!)
+  );
+
+  // Require a bucket to hold a meaningful share before calling it best/worst
+  const minTotal = Math.max(5, Math.round(total * 0.02));
+
+  const worstShift = pickExtreme(byShift, (b) => b.noReturnRate, minTotal, "max");
+  const bestShift = pickExtreme(byShift, (b) => b.noReturnRate, minTotal, "min");
+  const worstDay = pickExtreme(byDayOfWeek, (b) => b.noReturnRate, minTotal, "max");
+
+  // Best response window: scan shifts AND hour bands, take highest effectiveness
+  const bestResponseWindow = pickExtreme(
+    [...byShift, ...byHourBand],
+    (b) => b.effectiveRate,
+    minTotal,
+    "max"
+  );
+
+  const overallNoReturnRate = pct(
+    records.filter(isNoReturn).length,
+    total
+  );
+
+  const actionPlan = buildActionPlan({
+    overallNoReturnRate,
+    worstShift,
+    bestShift,
+    worstDay,
+    bestResponseWindow,
+    byDayOfWeek,
+  });
+
+  return {
+    available,
+    byShift,
+    byDayOfWeek,
+    byHourBand,
+    worstShift,
+    bestShift,
+    worstDay,
+    bestResponseWindow,
+    overallNoReturnRate,
+    actionPlan,
+  };
+}
+
+/** Build a short, data-driven action plan from the identified patterns. */
+function buildActionPlan(input: {
+  overallNoReturnRate: number;
+  worstShift: TemporalBucket | null;
+  bestShift: TemporalBucket | null;
+  worstDay: TemporalBucket | null;
+  bestResponseWindow: TemporalBucket | null;
+  byDayOfWeek: TemporalBucket[];
+}): string[] {
+  const {
+    overallNoReturnRate,
+    worstShift,
+    bestShift,
+    worstDay,
+    bestResponseWindow,
+    byDayOfWeek,
+  } = input;
+
+  const plan: string[] = [];
+
+  // 1. Critical shift — only if it stands clearly above the best shift
+  if (
+    worstShift &&
+    bestShift &&
+    worstShift.label !== bestShift.label &&
+    worstShift.noReturnRate - bestShift.noReturnRate >= 8
+  ) {
+    const diff = worstShift.noReturnRate - bestShift.noReturnRate;
+    plan.push(
+      `Turno crítico: ${worstShift.label} concentra ${worstShift.noReturnRate}% de casos sem retorno — ${diff} p.p. acima do melhor turno (${bestShift.label}, ${bestShift.noReturnRate}%). Reforce a cobertura nesse turno e estabeleça uma passagem de plantão formal para que nenhum alerta fique em aberto.`
+    );
+  }
+
+  // 2. Weekend / worst-day fragility
+  const weekend = byDayOfWeek.filter((d) => WEEKEND_LABELS.has(d.label));
+  const weekday = byDayOfWeek.filter((d) => !WEEKEND_LABELS.has(d.label));
+  if (weekend.length > 0 && weekday.length > 0) {
+    const wkndRate = pct(
+      weekend.reduce((s, d) => s + d.noReturn, 0),
+      weekend.reduce((s, d) => s + d.total, 0)
+    );
+    const wkdayRate = pct(
+      weekday.reduce((s, d) => s + d.noReturn, 0),
+      weekday.reduce((s, d) => s + d.total, 0)
+    );
+    if (wkndRate - wkdayRate >= 8) {
+      plan.push(
+        `Fins de semana são o ponto mais frágil: ${wkndRate}% de casos sem retorno aos sábados/domingos contra ${wkdayRate}% nos dias úteis. Avalie uma escala dedicada de fim de semana ou uma checagem ativa dos alertas em aberto na segunda de manhã.`
+      );
+    } else if (worstDay && worstDay.noReturnRate - overallNoReturnRate >= 8) {
+      plan.push(
+        `${worstDay.label} apresenta o maior índice de casos sem retorno (${worstDay.noReturnRate}%, contra média de ${overallNoReturnRate}%). Direcione atenção extra a esse dia.`
+      );
+    }
+  }
+
+  // 3. Best-performing window as a process reference
+  if (bestResponseWindow && bestResponseWindow.effectiveRate >= 50) {
+    plan.push(
+      `Melhor desempenho de resposta: ${bestResponseWindow.label} (${bestResponseWindow.effectiveRate}% de respostas efetivas). Use essa janela como referência de processo e replique a rotina de acompanhamento nos turnos críticos.`
+    );
+  }
+
+  // 4. Fallback when nothing stands out
+  if (plan.length === 0) {
+    plan.push(
+      `Os casos sem retorno estão distribuídos de forma relativamente uniforme entre turnos, dias e horários (média de ${overallNoReturnRate}%). Mantenha o monitoramento e foque na redução do volume total de alertas em aberto.`
+    );
+  }
+
+  return plan;
 }

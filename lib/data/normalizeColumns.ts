@@ -74,6 +74,28 @@ export const COLUMN_MAP: Record<string, string> = {
   resultado_clinico: "clinical_outcome",
   outcome: "clinical_outcome",
 
+  // Temporal / responsiveness fields (used by the Improvement Opportunity panel)
+  turno_escala: "shift",
+  turno: "shift",
+  turno_coberto: "shift_covered",
+  hora: "event_time",
+  efetividade: "effectiveness_flag",
+
+  // Discharge / admission dates
+  data_alta: "discharge_date",
+  data_de_alta: "discharge_date",
+  alta: "discharge_date",
+  data_internacao: "admission_date",
+  data_de_internacao: "admission_date",
+
+  // Intervention result (Resultado da Intervenção)
+  resultado_da_intervencao: "intervention_result",
+  resultado_intervencao: "intervention_result",
+  resultado_da_intervencao_unidade: "intervention_result",
+
+  // Final monitoring status (Status column – distinct from aura_action_status)
+  status: "monitoring_status",
+
   // Additional optional fields
   observacoes: "observations",
   observacao: "observations",

@@ -1,41 +1,32 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { getCacheStatus } from "@/lib/cache/dashboardCache";
+import { hasUploadedFile, getMetadata } from "@/lib/csv/parseCsvFile";
 
 export async function GET() {
-  const session = await auth();
   const cache = getCacheStatus();
+  const fileLoaded = hasUploadedFile();
+  const meta = getMetadata();
 
-  const authenticated = !!session?.accessToken;
-  const hasTokenError = session?.error === "RefreshTokenError";
+  const status = !fileLoaded
+    ? "error"
+    : cache.hasData && !cache.isFresh
+    ? "degraded"
+    : "ok";
 
-  const { host, sitePath, filePath } = {
-    host: process.env.SHAREPOINT_HOST ?? "redealtana1.sharepoint.com",
-    sitePath: process.env.SHAREPOINT_SITE_PATH ?? "/sites/AURA-CommandCenter",
-    filePath:
-      process.env.SHAREPOINT_FILE_PATH ??
-      "/- ROTINAS AURA/Dash Paciente watcher - AURA v5.3.3.xlsx",
-  };
-
-  const status =
-    !authenticated || hasTokenError
-      ? "error"
-      : cache.hasData && !cache.isFresh
-      ? "degraded"
-      : "ok";
+  const dataSource = meta
+    ? `CSV: ${meta.originalName} (${meta.rowCount} linhas, enviado em ${new Date(meta.uploadedAt).toLocaleString("pt-BR")})`
+    : "Nenhum arquivo carregado";
 
   return NextResponse.json(
     {
       status,
-      authenticated,
-      graphConnected: authenticated && !hasTokenError,
-      userEmail: session?.user?.email ?? null,
+      fileLoaded,
       lastFetchAt: cache.lastFetchAt,
-      dataSource: `SharePoint: ${host}${sitePath}${filePath}`,
+      dataSource,
       totalRowsLoaded: cache.rowCount,
-      lastError: hasTokenError
-        ? "Token de acesso expirado. Faça login novamente."
-        : cache.lastError,
+      lastError: cache.lastError,
+      uploadedAt: meta?.uploadedAt ?? null,
+      originalName: meta?.originalName ?? null,
     },
     { status: status === "error" ? 503 : 200 }
   );

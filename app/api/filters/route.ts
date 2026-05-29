@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { loadSpreadsheetData } from "@/lib/dashboard/loadSpreadsheetData";
 import { FiltersResponse } from "@/lib/dashboard/types";
 import { parseDate } from "@/lib/dashboard/applyFilters";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  }
-
   try {
-    const { rows } = await loadSpreadsheetData(session.accessToken);
+    const { rows } = await loadSpreadsheetData();
 
     const dates = rows
       .map((r) => parseDate(r.date))

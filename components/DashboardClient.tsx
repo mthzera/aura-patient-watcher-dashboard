@@ -9,6 +9,8 @@ import { ClinicalIndicatorsPanel } from "@/components/ClinicalIndicatorsPanel";
 import { UnitManagementTable } from "@/components/UnitManagementTable";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { ImprovementOpportunityPanel } from "@/components/ImprovementOpportunityPanel";
+import { AlertNarrativeTable } from "@/components/AlertNarrativeTable";
+import { UploadPrompt } from "@/components/UploadPrompt";
 import {
   DashboardResponse,
   FiltersResponse,
@@ -23,16 +25,6 @@ import {
   XCircle,
   AlertTriangle,
 } from "lucide-react";
-
-interface User {
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
-}
-
-interface Props {
-  user: User;
-}
 
 const REFRESH_SECONDS = parseInt(
   process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_SECONDS ?? "60",
@@ -75,14 +67,20 @@ const EMPTY_FILTERS: ActiveFilters = {
   auraActionStatus: "",
 };
 
-export function DashboardClient({ user }: Props) {
+// True when the error message indicates no file has been uploaded yet
+function isNoFileError(msg: string): boolean {
+  return msg.toLowerCase().includes("nenhum arquivo csv");
+}
+
+export function DashboardClient() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [filterOptions, setFilterOptions] = useState<FiltersResponse | null>(null);
   const [filters, setFilters] = useState<ActiveFilters>(EMPTY_FILTERS);
   const [isLoading, setIsLoading] = useState(true);
-  const [dataSource, setDataSource] = useState("SharePoint");
+  const [dataSource, setDataSource] = useState("CSV local");
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [reinternacaoRowCount, setReinternacaoRowCount] = useState<number | null>(null);
 
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -139,32 +137,61 @@ export function DashboardClient({ user }: Props) {
     }
   }, []);
 
+  const fetchReinternacaoStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/reinternacoes-status");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.loaded && json.meta?.rowCount) {
+          setReinternacaoRowCount(json.meta.rowCount);
+        }
+      }
+    } catch {
+      // non-critical
+    }
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     await fetch("/api/refresh", { method: "POST" });
-    await Promise.all([
-      fetchDashboard(filtersRef.current),
-      fetchFilters(),
-    ]);
+    await Promise.all([fetchDashboard(filtersRef.current), fetchFilters()]);
   }, [fetchDashboard, fetchFilters]);
+
+  // Called after a successful CSV upload — reload everything
+  const handleUploadSuccess = useCallback(async () => {
+    setError(null);
+    setFilters(EMPTY_FILTERS);
+    await Promise.all([
+      fetchDashboard(EMPTY_FILTERS),
+      fetchFilters(),
+      fetchHealth(),
+    ]);
+  }, [fetchDashboard, fetchFilters, fetchHealth]);
 
   useEffect(() => {
     fetchDashboard(EMPTY_FILTERS);
     fetchFilters();
     fetchHealth();
-  }, [fetchDashboard, fetchFilters, fetchHealth]);
+    fetchReinternacaoStatus();
+  }, [fetchDashboard, fetchFilters, fetchHealth, fetchReinternacaoStatus]);
 
   useEffect(() => {
     fetchDashboard(filters);
   }, [filters, fetchDashboard]);
 
-  // Auto-refresh
+  // Auto-refresh (only when data is loaded)
   useEffect(() => {
+    if (!data) return;
     const id = setInterval(
       () => fetchDashboard(filtersRef.current),
       REFRESH_SECONDS * 1000
     );
     return () => clearInterval(id);
-  }, [fetchDashboard]);
+  }, [data, fetchDashboard]);
+
+  // Show upload screen when no file has been uploaded yet
+  if (!isLoading && error && isNoFileError(error)) {
+    return <UploadPrompt onUploadSuccess={handleUploadSuccess} />;
+  }
 
   const metrics = data?.metrics ?? EMPTY_METRICS;
   const lastFetchAt = data?.lastFetchAt ?? null;
@@ -176,9 +203,14 @@ export function DashboardClient({ user }: Props) {
         isLoading={isLoading}
         isConnected={!error}
         onRefresh={handleRefresh}
+        onUploadSuccess={handleUploadSuccess}
+        onReinternacaoUpload={(count) => {
+          setReinternacaoRowCount(count);
+          fetchDashboard(filtersRef.current);
+        }}
+        reinternacaoRowCount={reinternacaoRowCount}
         autoRefreshSeconds={REFRESH_SECONDS}
         dataSource={dataSource}
-        user={user}
       />
 
       <main className="mx-auto max-w-screen-2xl px-6 py-6 space-y-6">
@@ -193,8 +225,8 @@ export function DashboardClient({ user }: Props) {
           </div>
         )}
 
-        {/* Error state */}
-        {error && (
+        {/* Error state (only if data was previously loaded) */}
+        {error && !isNoFileError(error) && (
           <div className="rounded-xl border border-red-800 bg-red-950/30 p-5 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
             <div>
@@ -214,7 +246,7 @@ export function DashboardClient({ user }: Props) {
           onClear={() => setFilters(EMPTY_FILTERS)}
         />
 
-        {/* Record count context */}
+        {/* Record count */}
         {data && (
           <p className="text-xs text-slate-500">
             Exibindo{" "}
@@ -275,7 +307,14 @@ export function DashboardClient({ user }: Props) {
             <ClinicalIndicatorsPanel metrics={metrics} />
             <UnitManagementTable data={data.unitSummaries} />
             <TimeSeriesChart data={data.timeSeries} />
-            <ImprovementOpportunityPanel metrics={metrics} />
+            <ImprovementOpportunityPanel
+              metrics={metrics}
+              responsiveness={data.responsiveness}
+            />
+            <AlertNarrativeTable
+              narratives={data.alertNarratives}
+              executiveSummary={data.executiveSummary}
+            />
           </>
         )}
 

@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { loadSpreadsheetData } from "@/lib/dashboard/loadSpreadsheetData";
 import { applyFilters } from "@/lib/dashboard/applyFilters";
 import {
   calculateMetrics,
   calculateUnitSummaries,
   buildTimeSeries,
+  calculateResponsiveness,
 } from "@/lib/dashboard/calculateMetrics";
+import {
+  buildAlertNarratives,
+  buildAlertExecutiveSummary,
+} from "@/lib/dashboard/buildAlertNarrative";
+import { parseReinternacoes } from "@/lib/csv/parseReinternacoes";
 import { DashboardFilters, DashboardResponse } from "@/lib/dashboard/types";
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: "Não autenticado", authenticated: false }, { status: 401 });
-  }
-
   const { searchParams } = request.nextUrl;
 
   const filters: DashboardFilters = {
@@ -27,15 +27,19 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    const { rows, warnings, lastFetchAt } = await loadSpreadsheetData(
-      session.accessToken
-    );
+    const { rows, warnings, lastFetchAt } = await loadSpreadsheetData();
     const filtered = applyFilters(rows, filters);
+
+    // Load reinternações file if available (no cache needed — small file)
+    const reinternacoes = parseReinternacoes();
 
     const response: DashboardResponse = {
       metrics: calculateMetrics(filtered),
       unitSummaries: calculateUnitSummaries(filtered),
       timeSeries: buildTimeSeries(filtered),
+      responsiveness: calculateResponsiveness(filtered),
+      alertNarratives: buildAlertNarratives(filtered, reinternacoes),
+      executiveSummary: buildAlertExecutiveSummary(filtered),
       totalRows: rows.length,
       filteredRows: filtered.length,
       lastFetchAt,
