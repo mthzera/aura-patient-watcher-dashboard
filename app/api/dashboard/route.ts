@@ -7,11 +7,8 @@ import {
   buildTimeSeries,
   calculateResponsiveness,
 } from "@/lib/dashboard/calculateMetrics";
-import {
-  buildAlertNarratives,
-  buildAlertExecutiveSummary,
-} from "@/lib/dashboard/buildAlertNarrative";
 import { parseReinternacoes } from "@/lib/csv/parseReinternacoes";
+import { buildReinternacaoAlertAnalysis } from "@/lib/dashboard/buildReinternacaoAnalysis";
 import { DashboardFilters, DashboardResponse } from "@/lib/dashboard/types";
 
 export async function GET(request: NextRequest) {
@@ -38,8 +35,7 @@ export async function GET(request: NextRequest) {
       unitSummaries: calculateUnitSummaries(filtered),
       timeSeries: buildTimeSeries(filtered),
       responsiveness: calculateResponsiveness(filtered),
-      alertNarratives: buildAlertNarratives(filtered, reinternacoes),
-      executiveSummary: buildAlertExecutiveSummary(filtered),
+      reinternacaoAlertAnalysis: buildReinternacaoAlertAnalysis(rows, reinternacoes),
       totalRows: rows.length,
       filteredRows: filtered.length,
       lastFetchAt,

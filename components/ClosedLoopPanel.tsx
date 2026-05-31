@@ -1,13 +1,25 @@
 "use client";
 
-import { DashboardMetrics } from "@/lib/dashboard/types";
+import type {
+  DashboardMetrics,
+  ReinternacaoAlertAnalysis,
+} from "@/lib/dashboard/types";
 import { ArrowRight } from "lucide-react";
 
 interface Props {
   metrics: DashboardMetrics;
+  reinternacaoAlertAnalysis?: ReinternacaoAlertAnalysis;
 }
 
-export function ClosedLoopPanel({ metrics }: Props) {
+export function ClosedLoopPanel({ metrics, reinternacaoAlertAnalysis }: Props) {
+  const noReturnRate = pct(metrics.noReturnCases, metrics.auraAlerts);
+  const priorAlertRate = reinternacaoAlertAnalysis?.available
+    ? pct(
+        reinternacaoAlertAnalysis.withPriorAlert,
+        reinternacaoAlertAnalysis.totalReinternacoes
+      )
+    : null;
+
   const steps = [
     {
       label: "Alerta AURA",
@@ -18,8 +30,8 @@ export function ClosedLoopPanel({ metrics }: Props) {
     },
     {
       label: "Triagem",
-      value: metrics.totalRecords,
-      description: "Casos avaliados",
+      value: metrics.triagens,
+      description: "Alertas com retorno",
       color: "border-violet-600 text-violet-300",
       bg: "bg-violet-950/50",
     },
@@ -40,24 +52,23 @@ export function ClosedLoopPanel({ metrics }: Props) {
   ];
 
   return (
-    <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-6">
+    <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-5">
       <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
-        O que mais prova a efetividade
+        Efetividade dos Alertas AURA
       </h2>
-      <p className="text-xs text-slate-500 mb-6 max-w-2xl">
-        O ponto mais forte da planilha é o ciclo rastreável: quando a unidade
-        responde ao alerta, a maioria dos casos evolui para melhora clínica,
-        condição basal ou estabilização.
+      <p className="text-xs text-slate-500 mb-4 max-w-2xl">
+        Fluxo rastreável do alerta até o desfecho, com indicadores resumidos de
+        retorno, ajuste de régua e alta com alerta prévio.
       </p>
 
       {/* Flow diagram */}
-      <div className="flex flex-wrap items-center gap-2 mb-6">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         {steps.map((step, idx) => (
           <div key={step.label} className="flex items-center gap-2">
             <div
-              className={`rounded-lg border ${step.color} ${step.bg} px-5 py-4 min-w-[140px] text-center`}
+              className={`rounded-lg border ${step.color} ${step.bg} px-4 py-3 min-w-[130px] text-center`}
             >
-              <div className="text-2xl font-bold tabular-nums">
+              <div className="text-xl font-bold tabular-nums">
                 {step.value}
               </div>
               <div className="text-xs font-semibold mt-1">{step.label}</div>
@@ -70,8 +81,37 @@ export function ClosedLoopPanel({ metrics }: Props) {
         ))}
       </div>
 
+      {/* Numeric conclusion */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <ConclusionStat
+          label="Sem retorno"
+          value={metrics.noReturnCases}
+          percent={noReturnRate}
+          detail="dos alertas AURA"
+          tone="warning"
+        />
+        <ConclusionStat
+          label="Retorno normal/basal/estável"
+          value={metrics.normalClinicalReturnPatients}
+          percent={metrics.normalClinicalReturnAlertRate}
+          detail={`${metrics.normalClinicalReturnAlerts} alertas AURA`}
+          tone="info"
+        />
+        <ConclusionStat
+          label="Alta com alerta prévio"
+          value={reinternacaoAlertAnalysis?.withPriorAlert ?? 0}
+          percent={priorAlertRate}
+          detail={
+            reinternacaoAlertAnalysis?.available
+              ? `de ${reinternacaoAlertAnalysis.totalReinternacoes} altas`
+              : "arquivo de reinternações pendente"
+          }
+          tone="default"
+        />
+      </div>
+
       {/* Effectiveness highlight */}
-      <div className="rounded-lg border border-teal-800 bg-teal-950/40 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="rounded-lg border border-teal-800 bg-teal-950/40 p-3 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
           <div className="text-xs font-semibold uppercase tracking-widest text-teal-400 mb-0.5">
             Efetividade do ciclo fechado
@@ -85,10 +125,52 @@ export function ClosedLoopPanel({ metrics }: Props) {
             estabilização).
           </p>
         </div>
-        <div className="text-5xl font-bold text-teal-300 tabular-nums shrink-0">
+        <div className="text-4xl font-bold text-teal-300 tabular-nums shrink-0">
           {metrics.closedLoopEffectivenessRate}%
         </div>
       </div>
     </section>
   );
+}
+
+function ConclusionStat({
+  label,
+  value,
+  percent,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: number;
+  percent: number | null;
+  detail: string;
+  tone: "default" | "warning" | "info";
+}) {
+  const toneClass =
+    tone === "warning"
+      ? "border-amber-800/60 bg-amber-950/25 text-amber-300"
+      : tone === "info"
+      ? "border-sky-800/60 bg-sky-950/25 text-sky-300"
+      : "border-violet-800/60 bg-violet-950/25 text-violet-300";
+
+  return (
+    <div className={`rounded-lg border p-3 ${toneClass}`}>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+      </div>
+      <div className="mt-2 flex items-end gap-2">
+        <span className="text-2xl font-bold tabular-nums text-white">
+          {value}
+        </span>
+        {percent !== null && (
+          <span className="pb-1 text-lg font-bold tabular-nums">{percent}%</span>
+        )}
+      </div>
+      <div className="mt-1 text-xs text-slate-500">{detail}</div>
+    </div>
+  );
+}
+
+function pct(part: number, total: number): number {
+  return total > 0 ? Math.round((part / total) * 100) : 0;
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   DashboardMetrics,
   ResponsivenessAnalysis,
@@ -13,8 +12,6 @@ import {
   Sun,
   TrendingDown,
   TrendingUp,
-  Sparkles,
-  Loader2,
   Lightbulb,
 } from "lucide-react";
 
@@ -50,8 +47,43 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
             assistencial mais falha — por turno, dia da semana e horário — para
             direcionar o plano de ação.
           </p>
+          {metrics.normalClinicalReturnAlerts > 0 && (
+            <p className="mt-3 text-sm text-slate-300 leading-relaxed max-w-3xl">
+              Além disso,{" "}
+              <strong className="text-sky-300">
+                {metrics.normalClinicalReturnPatients} paciente
+                {metrics.normalClinicalReturnPatients !== 1 ? "s" : ""}
+              </strong>{" "}
+              tiveram retorno da clínica indicando quadro normal, basal ou estável
+              após alerta AURA. Isso corresponde a{" "}
+              {metrics.normalClinicalReturnAlerts} alerta
+              {metrics.normalClinicalReturnAlerts !== 1 ? "s" : ""} (
+              {metrics.normalClinicalReturnAlertRate}% dos alertas AURA).
+            </p>
+          )}
         </div>
       </div>
+
+      {metrics.normalClinicalReturnAlerts > 0 && (
+        <div className="rounded-lg border border-sky-900/50 bg-sky-950/20 p-5">
+          <div className="flex items-start gap-3">
+            <TrendingUp className="h-4 w-4 text-sky-300 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-sky-300 mb-1">
+                Ajuste de régua do alerta
+              </h3>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                Como {metrics.normalClinicalReturnPatients} paciente
+                {metrics.normalClinicalReturnPatients !== 1 ? "s" : ""} estavam
+                normais/basais/estáveis após o alerta, a recomendação é revisar os
+                critérios de disparo e considerar subir a régua do AURA para reduzir
+                alertas de baixa prioridade sem perder sensibilidade para casos
+                agudos.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Highlight cards */}
       {hasTemporal && (
@@ -114,10 +146,26 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
             </h3>
           </div>
           <ul className="space-y-2.5">
+            {metrics.normalClinicalReturnAlerts > 0 && (
+              <li className="flex gap-2.5 text-sm text-slate-300">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-900/60 text-xs font-bold text-teal-300">
+                  1
+                </span>
+                <span className="leading-relaxed">
+                  Subir a régua dos critérios de alerta:{" "}
+                  {metrics.normalClinicalReturnPatients} paciente
+                  {metrics.normalClinicalReturnPatients !== 1 ? "s" : ""} tiveram
+                  retorno normal/basal/estável após o alerta (
+                  {metrics.normalClinicalReturnAlertRate}% dos alertas AURA).
+                  Revise limiares e combinações de sinais para reduzir alertas de
+                  baixa prioridade.
+                </span>
+              </li>
+            )}
             {r!.actionPlan.map((item, i) => (
               <li key={i} className="flex gap-2.5 text-sm text-slate-300">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-900/60 text-xs font-bold text-teal-300">
-                  {i + 1}
+                  {i + (metrics.normalClinicalReturnAlerts > 0 ? 2 : 1)}
                 </span>
                 <span className="leading-relaxed">{item}</span>
               </li>
@@ -125,9 +173,6 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
           </ul>
         </div>
       )}
-
-      {/* AI suggestion */}
-      {hasTemporal && <AiSuggestion responsiveness={r!} metrics={metrics} />}
 
       {/* Legend / no data */}
       {!hasTemporal && (
@@ -259,96 +304,3 @@ function BreakdownColumn({
   );
 }
 
-// ---------------------------------------------------------------------------
-// AI suggestion (Llama)
-// ---------------------------------------------------------------------------
-
-function AiSuggestion({
-  responsiveness,
-  metrics,
-}: {
-  responsiveness: ResponsivenessAnalysis;
-  metrics: DashboardMetrics;
-}) {
-  const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
-    "idle"
-  );
-  const [text, setText] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
-
-  async function generate() {
-    setState("loading");
-    setText("");
-    setErrorMsg("");
-    try {
-      const res = await fetch("/api/ai-suggestion", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ responsiveness, metrics }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setErrorMsg(json.error ?? "Falha ao gerar a sugestão.");
-        setState("error");
-        return;
-      }
-      setText(json.suggestion ?? "");
-      setState("done");
-    } catch {
-      setErrorMsg("Erro de rede ao contatar o serviço de IA.");
-      setState("error");
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-violet-900/50 bg-violet-950/20 p-5">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-violet-300" />
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-violet-300">
-            Sugestão com IA (Llama)
-          </h3>
-        </div>
-        <button
-          onClick={generate}
-          disabled={state === "loading"}
-          className="flex items-center gap-1.5 rounded-md border border-violet-700 bg-violet-900/40 px-3 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-800/60 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {state === "loading" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Sparkles className="h-3.5 w-3.5" />
-          )}
-          {state === "loading"
-            ? "Gerando…"
-            : state === "done"
-            ? "Gerar novamente"
-            : "Gerar análise"}
-        </button>
-      </div>
-
-      {state === "idle" && (
-        <p className="text-sm text-slate-400 leading-relaxed">
-          Gere uma análise interpretativa dos padrões temporais e recomendações
-          de plano de ação a partir de um modelo Llama.
-        </p>
-      )}
-
-      {state === "loading" && (
-        <p className="text-sm text-slate-400">
-          O modelo está analisando os dados de responsividade…
-        </p>
-      )}
-
-      {state === "error" && (
-        <p className="text-sm text-red-300">{errorMsg}</p>
-      )}
-
-      {state === "done" && text && (
-        <div className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">
-          {text}
-        </div>
-      )}
-    </div>
-  );
-}

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { FiltersResponse } from "@/lib/dashboard/types";
 
 interface ActiveFilters {
@@ -19,6 +21,8 @@ interface Props {
 }
 
 export function FiltersBar({ filters, filterOptions, onChange, onClear }: Props) {
+  const [isVisible, setIsVisible] = useState(true);
+
   function update(key: keyof ActiveFilters, value: string) {
     onChange({ ...filters, [key]: value });
   }
@@ -27,6 +31,38 @@ export function FiltersBar({ filters, filterOptions, onChange, onClear }: Props)
 
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-800/40 px-5 py-4">
+      <div className={`flex items-center justify-between gap-3${isVisible ? " mb-4" : ""}`}>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Filtros
+          </span>
+          {!isVisible && hasActiveFilters && (
+            <span className="rounded-full bg-teal-500/20 px-2 py-0.5 text-[10px] font-medium text-teal-300">
+              Ativos
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsVisible((v) => !v)}
+          className="flex items-center gap-1.5 rounded-md border border-slate-600 bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-600"
+          aria-expanded={isVisible}
+        >
+          {isVisible ? (
+            <>
+              <ChevronUp className="h-3.5 w-3.5" />
+              Ocultar filtros
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-3.5 w-3.5" />
+              Mostrar filtros
+            </>
+          )}
+        </button>
+      </div>
+
+      {isVisible && (
       <div className="flex flex-wrap items-end gap-3">
         {/* Date range */}
         <div className="flex flex-col gap-1 min-w-[130px]">
@@ -103,6 +139,7 @@ export function FiltersBar({ filters, filterOptions, onChange, onClear }: Props)
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }

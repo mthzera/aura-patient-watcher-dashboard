@@ -39,7 +39,7 @@ export function KpiCard({
 
   return (
     <div
-      className={`rounded-xl border ${borderColor} ${bgColor} p-5 flex flex-col gap-2 ${
+      className={`rounded-xl border ${borderColor} ${bgColor} p-4 flex flex-col gap-1.5 ${
         highlight ? "ring-1 ring-teal-500/30" : ""
       }`}
     >
@@ -50,7 +50,7 @@ export function KpiCard({
         {icon && <span className="text-slate-500">{icon}</span>}
       </div>
 
-      <div className={`text-4xl font-bold tabular-nums ${valueColor}`}>
+      <div className={`text-3xl font-bold tabular-nums ${valueColor}`}>
         {value}
       </div>
 

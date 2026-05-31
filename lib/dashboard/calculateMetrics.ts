@@ -31,11 +31,32 @@ const FAVORABLE_OUTCOMES = [
   "melhora",
 ];
 
+/** Outcomes that indicate the patient was basically normal after alert/triage. */
+const NORMAL_CLINICAL_RETURN_OUTCOMES = [
+  "normal",
+  "sem alteração",
+  "sem alteracao",
+  "condição basal",
+  "condicao basal",
+  "basal",
+  "estável",
+  "estavel",
+  "estabilização",
+  "estabilizacao",
+  "estabilizado",
+];
+
 /** "No return" phrases: the cycle was not closed (unit never responded/followed up). */
 const NO_RETURN_PHRASES = ["não realizada, sem retorno", "sem retorno"];
 
-/** Transient decompensation classification phrases. */
+/** Transient decompensation classification phrases.
+ *  Covers both legacy ("transitória") and the two current subtypes
+ *  ("transitória basal" and "transitória estável"). */
 const TRANSIENT_PHRASES = [
+  "descompensação transitória basal",
+  "descompensacao transitoria basal",
+  "descompensação transitória estável",
+  "descompensacao transitoria estavel",
   "descompensação transitória esperada",
   "descompensacao transitoria esperada",
   "descompensação transitória",
@@ -54,6 +75,20 @@ const ACUTE_PHRASES = ["descompensação aguda", "descompensacao aguda"];
  *
  * Adjust this list to match actual values in your spreadsheet.
  */
+/**
+ * Whether this alert was triaged — i.e. the unit gave ANY response.
+ * Rule: sem retorno = sem triagem; any non-empty non-"sem retorno" response = 1 triagem.
+ */
+export function hasTriagem(record: PatientRecord): boolean {
+  // No clinical alteration = sem triagem
+  if (!normalize(record.clinical_alteration)) return false;
+
+  const status = normalize(record.aura_action_status);
+  if (!status) return false;
+  if (NO_RETURN_PHRASES.some((p) => status.includes(p))) return false;
+  return true;
+}
+
 export function hasUnitAction(record: PatientRecord): boolean {
   const status = normalize(record.aura_action_status);
   if (!status) return false;
@@ -88,12 +123,15 @@ export function hasUnitAction(record: PatientRecord): boolean {
 // Field-level classifiers
 // ---------------------------------------------------------------------------
 
+const NORMALIZE_NA = new Set(["n/a", "na", "n.a.", "-", "--"]);
+
 function normalize(val: string | null | undefined): string {
-  return (val ?? "")
+  const s = (val ?? "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
+  return NORMALIZE_NA.has(s) ? "" : s;
 }
 
 function isFavorableOutcome(record: PatientRecord): boolean {
@@ -101,7 +139,19 @@ function isFavorableOutcome(record: PatientRecord): boolean {
   return FAVORABLE_OUTCOMES.some((o) => outcome.includes(normalize(o)));
 }
 
+function isNormalClinicalReturn(record: PatientRecord): boolean {
+  const outcome = normalize(record.clinical_outcome);
+  const intervention = normalize(record.intervention_result as string | null | undefined);
+  return NORMAL_CLINICAL_RETURN_OUTCOMES.some((o) => {
+    const normalized = normalize(o);
+    return outcome.includes(normalized) || intervention.includes(normalized);
+  });
+}
+
 function isNoReturn(record: PatientRecord): boolean {
+  // No clinical alteration = sem retorno
+  if (!normalize(record.clinical_alteration)) return true;
+
   const status = normalize(record.aura_action_status);
   return NO_RETURN_PHRASES.some((p) => status.includes(p));
 }
@@ -167,9 +217,19 @@ export function calculateMetrics(records: PatientRecord[]): DashboardMetrics {
   const total = records.length;
 
   const auraAlerts = records.filter(isAuraAlerted).length;
+  const triagens = records.filter(hasTriagem).length;
   const unitActions = records.filter(hasUnitAction).length;
   const favorableOutcomes = records.filter(isFavorableOutcome).length;
   const noReturnCases = records.filter(isNoReturn).length;
+  const normalClinicalReturnAlerts = records.filter(
+    (r) => isAuraAlerted(r) && hasTriagem(r) && isNormalClinicalReturn(r)
+  );
+  const normalClinicalReturnAlertCount = normalClinicalReturnAlerts.length;
+  const normalClinicalReturnPatients = countUniquePatients(normalClinicalReturnAlerts);
+  const normalClinicalReturnAlertRate =
+    auraAlerts > 0
+      ? Math.round((normalClinicalReturnAlertCount / auraAlerts) * 100)
+      : 0;
 
   // Closed-loop effectiveness:
   // Among cases with a unit action AND a registered clinical outcome,
@@ -215,8 +275,12 @@ export function calculateMetrics(records: PatientRecord[]): DashboardMetrics {
     totalRecords: total,
     uniquePatients: countUniquePatients(records),
     auraAlerts,
+    triagens,
     unitActions,
     favorableOutcomes,
+    normalClinicalReturnAlerts: normalClinicalReturnAlertCount,
+    normalClinicalReturnPatients,
+    normalClinicalReturnAlertRate,
     closedLoopEffectivenessRate,
     noReturnCases,
     transientDecompensations,

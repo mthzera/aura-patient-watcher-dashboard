@@ -83,6 +83,15 @@ const COL: Record<string, string> = {
   grupo_dispensacao: "grupoDispensacao",
 };
 
+const NA_STRINGS = new Set([
+  "n/a", "na", "n.a.", "n.a", "-", "--", "---",
+  "nao se aplica", "não se aplica", "not applicable", "none",
+]);
+
+function isNaValue(raw: string): boolean {
+  return NA_STRINGS.has(raw.toLowerCase().trim());
+}
+
 function normalizeRow(
   raw: Record<string, unknown>
 ): Record<string, string | null> {
@@ -95,7 +104,7 @@ function normalizeRow(
         out[canonical] = null;
       } else {
         const str = String(value).trim();
-        out[canonical] = str.length > 0 ? str : null;
+        out[canonical] = str.length > 0 && !isNaValue(str) ? str : null;
       }
     }
   }

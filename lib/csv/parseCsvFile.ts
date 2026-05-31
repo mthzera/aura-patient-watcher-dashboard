@@ -25,6 +25,15 @@ export function getMetadata(): CsvMetadata | null {
   }
 }
 
+const NA_STRINGS = new Set([
+  "n/a", "na", "n.a.", "n.a", "-", "--", "---",
+  "nao se aplica", "não se aplica", "not applicable", "none",
+]);
+
+function isNaValue(raw: string): boolean {
+  return NA_STRINGS.has(raw.toLowerCase().trim());
+}
+
 export function parseCsvFile(): Record<string, unknown>[] {
   if (!existsSync(CSV_PATH)) {
     throw new Error(
@@ -50,8 +59,9 @@ export function parseCsvFile(): Record<string, unknown>[] {
     { defval: null, raw: true }
   );
 
-  // Normalize every value to a trimmed string (or null) so the rest of the
-  // pipeline never has to deal with numbers/Dates coming out of the parser.
+  // Normalize every value to a trimmed string (or null).
+  // "N/A", "na", "n.a.", "-" and similar are converted to null so downstream
+  // logic never needs to handle them as meaningful values.
   return rows.map((row) => {
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(row)) {
@@ -59,7 +69,7 @@ export function parseCsvFile(): Record<string, unknown>[] {
         out[key] = null;
       } else {
         const str = String(value).trim();
-        out[key] = str.length > 0 ? str : null;
+        out[key] = str.length > 0 && !isNaValue(str) ? str : null;
       }
     }
     return out;

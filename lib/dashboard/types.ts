@@ -73,10 +73,21 @@ export interface DashboardMetrics {
   uniquePatients: number;
   /** Records where AURA alert was flagged ("Sim") */
   auraAlerts: number;
+  /**
+   * Alerts that received any response from the unit (not "sem retorno" and not blank).
+   * Rule: sem retorno = sem triagem; each alert with a return = 1 triagem.
+   */
+  triagens: number;
   /** Records with a documented unit response */
   unitActions: number;
   /** Records with a favorable clinical outcome */
   favorableOutcomes: number;
+  /** AURA alerts with unit return where the clinical outcome was normal/basal/stable */
+  normalClinicalReturnAlerts: number;
+  /** Unique patients behind normalClinicalReturnAlerts */
+  normalClinicalReturnPatients: number;
+  /** normalClinicalReturnAlerts / auraAlerts * 100, rounded */
+  normalClinicalReturnAlertRate: number;
   /**
    * Closed-loop effectiveness: among cases that had both a unit action
    * AND a registered outcome, what % had a favorable outcome.
@@ -178,48 +189,40 @@ export interface DashboardFilters {
 }
 
 // ---------------------------------------------------------------------------
-// Alert narrative types
+// Reinternação alert cross-reference analysis
 // ---------------------------------------------------------------------------
 
-/** Humanized interpretive summary for a single alert record. */
-export interface AlertNarrative {
-  /** Zero-based position in the filtered record list (for stable table keys) */
-  index: number;
-  patientName: string | null;
-  date: string | null;
+/** A single AURA alert that preceded a discharge event of interest. */
+export interface PriorAlert {
+  date: string;
   unit: string | null;
-  alertReason: string | null;
-  interventionResult: string | null;
-  clinicalOutcome: string | null;
-  auraAction: string | null;
-  monitoringStatus: string | null;
-  dischargeDate: string | null;
-  /** Positive = alert was N days BEFORE discharge; 0 = same day; null = no date data */
-  daysBeforeDischarge: number | null;
-  eventType: "reinternação" | "óbito" | "outro" | null;
-  /** True when intervention_result is N/A, empty, or equivalent */
-  isNoReturn: boolean;
-  /** The full humanized phrase */
-  summaryText: string;
+  clinicalAlteration: string | null;
+  /** How many days before the discharge date this alert occurred (0 = same day). */
+  daysBeforeReinternacao: number;
 }
 
-/** Aggregate insights about alerts with no unit return. */
-export interface AlertExecutiveSummary {
-  /** Records where AURA alert was triggered (aura_alerted = S/Sim) */
-  totalAlerted: number;
-  /** Among alerted, how many had intervention_result = N/A / empty */
-  noReturnCount: number;
-  /** noReturnCount / totalAlerted * 100, rounded */
-  noReturnPercentage: number;
-  /** Slim list of no-return alerts for the detail callout */
-  noReturnAlerts: {
-    patientName: string | null;
-    date: string | null;
-    unit: string | null;
-    alertReason: string | null;
-  }[];
-  /** Ready-to-display summary sentence */
-  summaryText: string;
+/** Analysis result for one discharge event of interest (reinternation/hospitalization/death). */
+export interface ReinternacaoAlertMatch {
+  patientName: string;
+  /** Date from "Data Alta" in the reinternações file. */
+  reinternacaoDate: string;
+  conditionOnDischarge: string | null;
+  /** True if at least one AURA alert occurred within the 10 days prior. */
+  hadPriorAlert: boolean;
+  /** All AURA alerts found within 10 days before discharge (sorted: oldest first). */
+  priorAlerts: PriorAlert[];
+}
+
+/** Aggregate analysis: which discharge events had a prior AURA committee notification. */
+export interface ReinternacaoAlertAnalysis {
+  /** False when no reinternações file has been loaded. */
+  available: boolean;
+  totalReinternacoes: number;
+  /** Events with at least one AURA alert in the prior 10 days. */
+  withPriorAlert: number;
+  /** Events without any AURA alert in the prior 10 days. */
+  withoutPriorAlert: number;
+  matches: ReinternacaoAlertMatch[];
 }
 
 /** Response payload from /api/dashboard */
@@ -228,8 +231,7 @@ export interface DashboardResponse {
   unitSummaries: UnitSummary[];
   timeSeries: TimeSeriesPoint[];
   responsiveness: ResponsivenessAnalysis;
-  alertNarratives: AlertNarrative[];
-  executiveSummary: AlertExecutiveSummary;
+  reinternacaoAlertAnalysis: ReinternacaoAlertAnalysis;
   totalRows: number;
   filteredRows: number;
   lastFetchAt: string | null;

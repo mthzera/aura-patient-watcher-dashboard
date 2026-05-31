@@ -9,7 +9,7 @@ import { ClinicalIndicatorsPanel } from "@/components/ClinicalIndicatorsPanel";
 import { UnitManagementTable } from "@/components/UnitManagementTable";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { ImprovementOpportunityPanel } from "@/components/ImprovementOpportunityPanel";
-import { AlertNarrativeTable } from "@/components/AlertNarrativeTable";
+import { ReinternacaoAlertPanel } from "@/components/ReinternacaoAlertPanel";
 import { UploadPrompt } from "@/components/UploadPrompt";
 import {
   DashboardResponse,
@@ -35,8 +35,12 @@ const EMPTY_METRICS: DashboardMetrics = {
   totalRecords: 0,
   uniquePatients: 0,
   auraAlerts: 0,
+  triagens: 0,
   unitActions: 0,
   favorableOutcomes: 0,
+  normalClinicalReturnAlerts: 0,
+  normalClinicalReturnPatients: 0,
+  normalClinicalReturnAlertRate: 0,
   closedLoopEffectivenessRate: 0,
   noReturnCases: 0,
   transientDecompensations: 0,
@@ -213,7 +217,7 @@ export function DashboardClient() {
         dataSource={dataSource}
       />
 
-      <main className="mx-auto max-w-screen-2xl px-6 py-6 space-y-6">
+      <main className="mx-auto max-w-screen-2xl px-6 py-4 space-y-4">
         {/* Warnings */}
         {warnings.length > 0 && (
           <div className="rounded-lg border border-amber-800 bg-amber-950/30 px-4 py-3 space-y-1">
@@ -258,7 +262,7 @@ export function DashboardClient() {
         )}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
             label="Registros analisados"
             value={metrics.totalRecords}
@@ -303,17 +307,19 @@ export function DashboardClient() {
         {/* Main sections */}
         {data && (
           <>
-            <ClosedLoopPanel metrics={metrics} />
+            <ClosedLoopPanel
+              metrics={metrics}
+              reinternacaoAlertAnalysis={data.reinternacaoAlertAnalysis}
+            />
             <ClinicalIndicatorsPanel metrics={metrics} />
+            <ReinternacaoAlertPanel
+              analysis={data.reinternacaoAlertAnalysis}
+            />
             <UnitManagementTable data={data.unitSummaries} />
             <TimeSeriesChart data={data.timeSeries} />
             <ImprovementOpportunityPanel
               metrics={metrics}
               responsiveness={data.responsiveness}
-            />
-            <AlertNarrativeTable
-              narratives={data.alertNarratives}
-              executiveSummary={data.executiveSummary}
             />
           </>
         )}
