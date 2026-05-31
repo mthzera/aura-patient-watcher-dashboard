@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadSpreadsheetData } from "@/lib/dashboard/loadSpreadsheetData";
 import { FiltersResponse } from "@/lib/dashboard/types";
 import { parseDate } from "@/lib/dashboard/applyFilters";
+import { resolveClinicalAlteration } from "@/lib/data/normalizeClinicalAlteration";
 
 export async function GET() {
   try {
@@ -13,7 +14,9 @@ export async function GET() {
 
     const response: FiltersResponse = {
       units: unique(rows.map((r) => r.unit)),
-      clinicalAlterationTypes: unique(rows.map((r) => r.clinical_alteration)),
+      clinicalAlterationTypes: unique(
+        rows.map((r) => resolveClinicalAlteration(r))
+      ),
       clinicalOutcomes: unique(rows.map((r) => r.clinical_outcome)),
       auraActionStatuses: unique(rows.map((r) => r.aura_action_status)),
       minDate: dates.length > 0 ? [...dates].sort()[0] : null,

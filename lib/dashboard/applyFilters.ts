@@ -1,3 +1,4 @@
+import { resolveClinicalAlteration } from "@/lib/data/normalizeClinicalAlteration";
 import { PatientRecord, DashboardFilters } from "./types";
 
 /**
@@ -27,7 +28,10 @@ export function applyFilters(
 
     if (
       filters.clinicalAlteration &&
-      !matchesCaseInsensitive(r.clinical_alteration, filters.clinicalAlteration)
+      !matchesCaseInsensitive(
+        resolveClinicalAlteration(r),
+        filters.clinicalAlteration
+      )
     ) {
       return false;
     }

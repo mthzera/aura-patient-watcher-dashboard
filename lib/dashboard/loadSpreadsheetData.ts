@@ -1,5 +1,6 @@
 import { parseCsvFile } from "@/lib/csv/parseCsvFile";
 import { normalizeRows, getMissingFields } from "@/lib/data/normalizeColumns";
+import { normalizePatientClinicalAlterations } from "@/lib/data/normalizeClinicalAlteration";
 import {
   getCachedRows,
   isCacheFresh,
@@ -30,7 +31,9 @@ export async function loadSpreadsheetData(): Promise<LoadResult> {
 
   try {
     const rawRows = parseCsvFile();
-    const normalized = normalizeRows(rawRows) as PatientRecord[];
+    const normalized = normalizePatientClinicalAlterations(
+      normalizeRows(rawRows) as PatientRecord[]
+    );
 
     const missing = getMissingFields(normalized);
     if (missing.length > 0) {
