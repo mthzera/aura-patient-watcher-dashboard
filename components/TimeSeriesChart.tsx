@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
 import { TimeSeriesPoint } from "@/lib/dashboard/types";
@@ -21,6 +22,14 @@ const SERIES = [
   { key: "unitActions", label: "Atuações da unidade", color: "#fbbf24" },
   { key: "favorableOutcomes", label: "Desfechos favoráveis", color: "#2dd4bf" },
   { key: "noReturnCases", label: "Sem retorno", color: "#f87171" },
+] as const;
+
+// Reference bands (média diária por quinzena). Ajuste estes valores para
+// recalibrar os patamares de baixo / médio / alto.
+const REFERENCE_LINES = [
+  { value: 8, label: "Baixo", color: "#34d399" },
+  { value: 16, label: "Médio", color: "#fbbf24" },
+  { value: 24, label: "Alto", color: "#f87171" },
 ] as const;
 
 export function TimeSeriesChart({ data }: Props) {
@@ -37,13 +46,13 @@ export function TimeSeriesChart({ data }: Props) {
     );
   }
 
-  // One point per day so the day-to-day variation shows. To keep the axis
-  // readable we only label every ~15 days (computed below).
+  // Each point is a 15-day bucket starting at `date`; the range label
+  // (início – fim) is shown in the tooltip.
   const formatted = data.map((d) => ({
     ...d,
     dateLabel: formatDateLabel(d.date),
+    rangeLabel: formatRangeLabel(d.date),
   }));
-  const ticks = pickTicks(formatted);
 
   return (
     <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-6">
@@ -51,19 +60,17 @@ export function TimeSeriesChart({ data }: Props) {
         Evolução no tempo
       </h2>
       <p className="text-xs text-slate-500 mb-5">
-        Valores diários (eixo marcado a cada 15 dias)
+        Média diária por quinzena (janelas de 15 dias)
       </p>
 
       <ResponsiveContainer width="100%" height={280}>
         <LineChart
           data={formatted}
-          margin={{ top: 4, right: 8, left: -16, bottom: 4 }}
+          margin={{ top: 4, right: 52, left: -16, bottom: 4 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
           <XAxis
             dataKey="dateLabel"
-            ticks={ticks}
-            interval={0}
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             axisLine={{ stroke: "#334155" }}
             tickLine={false}
@@ -72,8 +79,24 @@ export function TimeSeriesChart({ data }: Props) {
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            allowDecimals={false}
+            allowDecimals
           />
+          {REFERENCE_LINES.map((ref) => (
+            <ReferenceLine
+              key={ref.label}
+              y={ref.value}
+              stroke={ref.color}
+              strokeDasharray="5 5"
+              strokeOpacity={0.55}
+              label={{
+                value: ref.label,
+                position: "right",
+                fill: ref.color,
+                fontSize: 10,
+                fillOpacity: 0.9,
+              }}
+            />
+          ))}
           <Tooltip
             contentStyle={{
               background: "#1e293b",
@@ -83,6 +106,9 @@ export function TimeSeriesChart({ data }: Props) {
             }}
             labelStyle={{ color: "#e2e8f0", marginBottom: 4 }}
             itemStyle={{ color: "#cbd5e1" }}
+            labelFormatter={(_label, payload) =>
+              payload?.[0]?.payload?.rangeLabel ?? _label
+            }
           />
           <Legend
             wrapperStyle={{ fontSize: 12, color: "#94a3b8", paddingTop: 12 }}
@@ -110,30 +136,10 @@ function formatDateLabel(iso: string): string {
   return `${day}/${month}`;
 }
 
-const LABEL_EVERY_DAYS = 15;
-const DAY_MS = 86_400_000;
-
-/**
- * Pick X-axis tick labels spaced ~15 calendar days apart. We walk the daily
- * points and select the first one at/after each 15-day grid line, always
- * including the last point so the most recent date is labeled.
- */
-function pickTicks(points: { date: string; dateLabel: string }[]): string[] {
-  if (points.length === 0) return [];
-
-  const ticks: string[] = [];
-  let threshold = Date.parse(`${points[0].date}T00:00:00Z`);
-
-  for (const p of points) {
-    const ms = Date.parse(`${p.date}T00:00:00Z`);
-    if (ms >= threshold) {
-      ticks.push(p.dateLabel);
-      while (threshold <= ms) threshold += LABEL_EVERY_DAYS * DAY_MS;
-    }
-  }
-
-  const last = points[points.length - 1].dateLabel;
-  if (ticks[ticks.length - 1] !== last) ticks.push(last);
-
-  return ticks;
+/** "05/01 – 19/01": the 15-day window starting at the bucket date. */
+function formatRangeLabel(iso: string): string {
+  const startMs = Date.parse(`${iso}T00:00:00Z`);
+  const endMs = startMs + 14 * 86_400_000;
+  const end = new Date(endMs).toISOString().slice(0, 10);
+  return `${formatDateLabel(iso)} – ${formatDateLabel(end)}`;
 }
