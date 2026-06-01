@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const filtered = applyFilters(rows, filters);
 
     // Load reinternações file if available (no cache needed — small file)
-    const reinternacoes = parseReinternacoes();
+    const reinternacoes = await parseReinternacoes();
 
     const response: DashboardResponse = {
       metrics: calculateMetrics(filtered),

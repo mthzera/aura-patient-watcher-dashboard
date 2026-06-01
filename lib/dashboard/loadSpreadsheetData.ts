@@ -30,7 +30,7 @@ export async function loadSpreadsheetData(): Promise<LoadResult> {
   }
 
   try {
-    const rawRows = parseCsvFile();
+    const rawRows = await parseCsvFile();
     const normalized = normalizePatientClinicalAlterations(
       normalizeRows(rawRows) as PatientRecord[]
     );

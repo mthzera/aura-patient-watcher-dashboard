@@ -5,7 +5,7 @@ import {
 } from "@/lib/csv/parseReinternacoes";
 
 export async function GET() {
-  const loaded = hasReinternacoes();
-  const meta = getReinternacaoMetadata();
+  const loaded = await hasReinternacoes();
+  const meta = await getReinternacaoMetadata();
   return NextResponse.json({ loaded, meta });
 }

@@ -6,24 +6,15 @@
  *   Data Início Atendimento;ID Carteira;Data Alta;Filial;Condição Alta;
  *   ID Paciente;Rota Entrega;Cod. Zon.;Nro Atend;...
  *
- * The file is saved to data/reinternacoes.csv by the upload endpoint.
+ * The file is persisted under the name reinternacoes.csv by the upload endpoint.
  */
 
 import * as XLSX from "xlsx";
-import path from "path";
-import { existsSync, readFileSync } from "fs";
+import { readFileMaybe, fileExists, saveFile } from "@/lib/storage/fileStore";
 import type { ReinternacaoRecord } from "@/lib/dashboard/types";
 
-export const REINTERNACOES_PATH = path.join(
-  process.cwd(),
-  "data",
-  "reinternacoes.csv"
-);
-export const REINTERNACOES_META_PATH = path.join(
-  process.cwd(),
-  "data",
-  "reinternacoes-metadata.json"
-);
+export const REINTERNACOES_NAME = "reinternacoes.csv";
+export const REINTERNACOES_META_NAME = "reinternacoes-metadata.json";
 
 export interface ReinternacaoMetadata {
   originalName: string;
@@ -32,19 +23,28 @@ export interface ReinternacaoMetadata {
   rowCount: number;
 }
 
-export function hasReinternacoes(): boolean {
-  return existsSync(REINTERNACOES_PATH);
+export function hasReinternacoes(): Promise<boolean> {
+  return fileExists(REINTERNACOES_NAME);
 }
 
-export function getReinternacaoMetadata(): ReinternacaoMetadata | null {
-  if (!existsSync(REINTERNACOES_META_PATH)) return null;
+export async function getReinternacaoMetadata(): Promise<ReinternacaoMetadata | null> {
+  const buffer = await readFileMaybe(REINTERNACOES_META_NAME);
+  if (!buffer) return null;
   try {
-    return JSON.parse(
-      readFileSync(REINTERNACOES_META_PATH, "utf-8")
-    ) as ReinternacaoMetadata;
+    return JSON.parse(buffer.toString("utf-8")) as ReinternacaoMetadata;
   } catch {
     return null;
   }
+}
+
+export async function saveReinternacaoMetadata(
+  meta: ReinternacaoMetadata
+): Promise<void> {
+  await saveFile(
+    REINTERNACOES_META_NAME,
+    JSON.stringify(meta, null, 2),
+    "application/json"
+  );
 }
 
 /** Normalize a column header to a stable lowercase ASCII key. */
@@ -111,11 +111,8 @@ function normalizeRow(
   return out;
 }
 
-/** Parse the saved reinternações CSV into typed records. */
-export function parseReinternacoes(): ReinternacaoRecord[] {
-  if (!existsSync(REINTERNACOES_PATH)) return [];
-
-  const buffer = readFileSync(REINTERNACOES_PATH);
+/** Parse a reinternações CSV buffer into typed records. */
+export function parseReinternacoesBuffer(buffer: Buffer): ReinternacaoRecord[] {
   const workbook = XLSX.read(buffer, { type: "buffer", raw: true });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) return [];
@@ -144,4 +141,11 @@ export function parseReinternacoes(): ReinternacaoRecord[] {
       idPaciente: r.idPaciente,
       nroAtend: r.nroAtend,
     }));
+}
+
+/** Read the persisted reinternações CSV from storage and parse it. */
+export async function parseReinternacoes(): Promise<ReinternacaoRecord[]> {
+  const buffer = await readFileMaybe(REINTERNACOES_NAME);
+  if (!buffer) return [];
+  return parseReinternacoesBuffer(buffer);
 }

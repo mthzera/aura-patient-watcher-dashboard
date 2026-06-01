@@ -4,8 +4,8 @@ import { hasUploadedFile, getMetadata } from "@/lib/csv/parseCsvFile";
 
 export async function GET() {
   const cache = getCacheStatus();
-  const fileLoaded = hasUploadedFile();
-  const meta = getMetadata();
+  const fileLoaded = await hasUploadedFile();
+  const meta = await getMetadata();
 
   const status = !fileLoaded
     ? "error"

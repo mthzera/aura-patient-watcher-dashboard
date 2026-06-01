@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import {
-  parseReinternacoes,
-  REINTERNACOES_PATH,
-  REINTERNACOES_META_PATH,
+  parseReinternacoesBuffer,
+  saveReinternacaoMetadata,
+  REINTERNACOES_NAME,
 } from "@/lib/csv/parseReinternacoes";
+import { saveFile } from "@/lib/storage/fileStore";
 
 export async function POST(request: NextRequest) {
   let formData: FormData;
@@ -37,30 +36,26 @@ export async function POST(request: NextRequest) {
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
 
-  const dataDir = path.dirname(REINTERNACOES_PATH);
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(REINTERNACOES_PATH, buffer);
-
-  // Validate the file is parseable and get row count
+  // Validate the file is parseable BEFORE persisting it.
   let rowCount = 0;
   try {
-    const rows = parseReinternacoes();
-    rowCount = rows.length;
+    rowCount = parseReinternacoesBuffer(buffer).length;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: `Arquivo salvo mas não pôde ser lido: ${msg}` },
+      { error: `O arquivo não pôde ser lido: ${msg}` },
       { status: 422 }
     );
   }
 
-  const meta = {
+  await saveFile(REINTERNACOES_NAME, buffer, "text/csv");
+
+  await saveReinternacaoMetadata({
     originalName: filename,
     uploadedAt: new Date().toISOString(),
     sizeBytes: buffer.byteLength,
     rowCount,
-  };
-  await writeFile(REINTERNACOES_META_PATH, JSON.stringify(meta, null, 2));
+  });
 
   return NextResponse.json({ success: true, filename, rowCount });
 }
