@@ -9,16 +9,35 @@ interface Props {
   metrics: DashboardMetrics;
 }
 
+type FunnelStep = {
+  label: string;
+  value: number;
+  description: string;
+  tooltip: string;
+  color: string;
+  bg: string;
+};
+
 export function ClosedLoopPanel({ metrics }: Props) {
-  const funnelSteps = [
-    {
-      label: "Registros",
-      value: metrics.totalRecords,
-      description: "Total no recorte",
-      tooltip: METRIC_TOOLTIPS.funnelRecords,
-      color: "border-slate-600 text-slate-300",
-      bg: "bg-slate-900/50",
-    },
+  const first: FunnelStep = {
+    label: "Registros",
+    value: metrics.totalRecords,
+    description: "Total no recorte",
+    tooltip: METRIC_TOOLTIPS.funnelRecords,
+    color: "border-slate-600 text-slate-300",
+    bg: "bg-slate-900/50",
+  };
+
+  const last: FunnelStep = {
+    label: "Desfechos Registrados",
+    value: metrics.registeredOutcomes,
+    description: "Desfecho clínico preenchido",
+    tooltip: METRIC_TOOLTIPS.funnelOutcomes,
+    color: "border-teal-500 text-teal-300",
+    bg: "bg-teal-950/50",
+  };
+
+  const middle: FunnelStep[] = [
     {
       label: "Alertas AURA",
       value: metrics.auraAlerts,
@@ -26,6 +45,14 @@ export function ClosedLoopPanel({ metrics }: Props) {
       tooltip: METRIC_TOOLTIPS.funnelAuraAlerts,
       color: "border-blue-600 text-blue-300",
       bg: "bg-blue-950/50",
+    },
+    {
+      label: "Atuações da Unidade",
+      value: metrics.unitActions,
+      description: "Respostas documentadas",
+      tooltip: METRIC_TOOLTIPS.funnelUnitActions,
+      color: "border-orange-600 text-orange-300",
+      bg: "bg-orange-950/40",
     },
     {
       label: "Alertas com Retorno",
@@ -47,23 +74,9 @@ export function ClosedLoopPanel({ metrics }: Props) {
       color: "border-amber-600 text-amber-300",
       bg: "bg-amber-950/50",
     },
-    {
-      label: "Atuações da Unidade",
-      value: metrics.unitActions,
-      description: "Respostas documentadas",
-      tooltip: METRIC_TOOLTIPS.funnelUnitActions,
-      color: "border-orange-600 text-orange-300",
-      bg: "bg-orange-950/40",
-    },
-    {
-      label: "Desfechos Registrados",
-      value: metrics.registeredOutcomes,
-      description: "Desfecho clínico preenchido",
-      tooltip: METRIC_TOOLTIPS.funnelOutcomes,
-      color: "border-teal-500 text-teal-300",
-      bg: "bg-teal-950/50",
-    },
-  ];
+  ].sort((a, b) => b.value - a.value);
+
+  const funnelSteps = [first, ...middle, last];
 
   return (
     <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-5">
@@ -71,8 +84,8 @@ export function ClosedLoopPanel({ metrics }: Props) {
         Efetividade dos Alertas AURA
       </h2>
       <p className="text-xs text-slate-500 mb-4 max-w-2xl">
-        Funil do alerta ao desfecho. Cada etapa usa o denominador indicado —
-        registros ou alertas AURA — sem misturar bases.
+        Registros primeiro; etapas intermediárias em ordem decrescente de volume;
+        desfechos registrados por último. Cada card indica seu denominador.
       </p>
 
       <div className="flex flex-wrap items-center gap-2 mb-5">
