@@ -353,12 +353,19 @@ function isoToMs(iso: string): number {
   return Date.parse(`${iso}T00:00:00Z`);
 }
 
+/** Round to one decimal place. */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
 /**
  * Build the evolution time series, aggregating records into fixed 15-day
  * buckets anchored at the earliest date in the dataset. Each point holds the
- * SUM of the four series over its 15-day window, so the line reads as a
- * fortnightly evolution instead of a noisy day-by-day plot. The point's `date`
- * is the window start (used as the X-axis label).
+ * DAILY AVERAGE of the four series within its window (total ÷ number of days
+ * covered), so the line reads as a smoothed fortnightly evolution on the same
+ * per-day scale as before. The point's `date` is the window start (used as the
+ * X-axis label). The last window may be partial, so it's divided by the days
+ * it actually spans.
  */
 export function buildTimeSeries(
   records: PatientRecord[]
@@ -369,10 +376,13 @@ export function buildTimeSeries(
 
   if (dated.length === 0) return [];
 
-  const minMs = dated.reduce(
-    (min, x) => Math.min(min, isoToMs(x.date)),
-    Infinity
-  );
+  let minMs = Infinity;
+  let maxMs = -Infinity;
+  for (const { date } of dated) {
+    const ms = isoToMs(date);
+    if (ms < minMs) minMs = ms;
+    if (ms > maxMs) maxMs = ms;
+  }
 
   const byBucket = new Map<string, PatientRecord[]>();
 
@@ -388,12 +398,17 @@ export function buildTimeSeries(
   const points: TimeSeriesPoint[] = [];
 
   for (const [date, recs] of byBucket) {
+    // Days actually covered by this window: a full 15, or fewer for the last,
+    // partial window that runs up to the dataset's max date.
+    const spanDays = Math.floor((maxMs - isoToMs(date)) / MS_PER_DAY) + 1;
+    const days = Math.min(BUCKET_DAYS, spanDays);
+
     points.push({
       date,
-      auraAlerts: recs.filter(isAuraAlerted).length,
-      unitActions: recs.filter(hasUnitAction).length,
-      favorableOutcomes: recs.filter(isFavorableOutcome).length,
-      noReturnCases: recs.filter(isNoReturn).length,
+      auraAlerts: round1(recs.filter(isAuraAlerted).length / days),
+      unitActions: round1(recs.filter(hasUnitAction).length / days),
+      favorableOutcomes: round1(recs.filter(isFavorableOutcome).length / days),
+      noReturnCases: round1(recs.filter(isNoReturn).length / days),
     });
   }
 

@@ -47,9 +47,12 @@ export function TimeSeriesChart({ data }: Props) {
 
   return (
     <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-6">
-      <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-5">
+      <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
         Evolução no tempo
       </h2>
+      <p className="text-xs text-slate-500 mb-5">
+        Média diária por quinzena (janelas de 15 dias)
+      </p>
 
       <ResponsiveContainer width="100%" height={280}>
         <LineChart
@@ -67,7 +70,7 @@ export function TimeSeriesChart({ data }: Props) {
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            allowDecimals={false}
+            allowDecimals
           />
           <Tooltip
             contentStyle={{
