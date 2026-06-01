@@ -2,23 +2,25 @@
 
 import type {
   DashboardMetrics,
-  ReinternacaoAlertAnalysis,
+  InitiationActionBreakdown,
 } from "@/lib/dashboard/types";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 
 interface Props {
   metrics: DashboardMetrics;
-  reinternacaoAlertAnalysis?: ReinternacaoAlertAnalysis;
+  initiationBreakdown?: InitiationActionBreakdown;
 }
 
-export function ClosedLoopPanel({ metrics, reinternacaoAlertAnalysis }: Props) {
+export function ClosedLoopPanel({ metrics, initiationBreakdown }: Props) {
   const noReturnRate = pct(metrics.noReturnCases, metrics.auraAlerts);
-  const priorAlertRate = reinternacaoAlertAnalysis?.available
-    ? pct(
-        reinternacaoAlertAnalysis.withPriorAlert,
-        reinternacaoAlertAnalysis.totalReinternacoes
-      )
-    : null;
+
+  const noReturnReasons =
+    initiationBreakdown?.available && initiationBreakdown.semRetornoTotal > 0
+      ? initiationBreakdown.reasons.filter(
+          (r) =>
+            r.key === "semContatoTelefonico" || r.key === "unidadeNaoRespondeu"
+        )
+      : [];
 
   const steps = [
     {
@@ -58,7 +60,7 @@ export function ClosedLoopPanel({ metrics, reinternacaoAlertAnalysis }: Props) {
       </h2>
       <p className="text-xs text-slate-500 mb-4 max-w-2xl">
         Fluxo rastreável do alerta até o desfecho, com indicadores resumidos de
-        retorno, ajuste de régua e alta com alerta prévio.
+        retorno e ajuste de régua.
       </p>
 
       {/* Flow diagram */}
@@ -82,7 +84,7 @@ export function ClosedLoopPanel({ metrics, reinternacaoAlertAnalysis }: Props) {
       </div>
 
       {/* Numeric conclusion */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         <ConclusionStat
           label="Sem retorno"
           value={metrics.noReturnCases}
@@ -97,18 +99,49 @@ export function ClosedLoopPanel({ metrics, reinternacaoAlertAnalysis }: Props) {
           detail={`${metrics.normalClinicalReturnAlerts} alertas AURA`}
           tone="info"
         />
-        <ConclusionStat
-          label="Alta com alerta prévio"
-          value={reinternacaoAlertAnalysis?.withPriorAlert ?? 0}
-          percent={priorAlertRate}
-          detail={
-            reinternacaoAlertAnalysis?.available
-              ? `de ${reinternacaoAlertAnalysis.totalReinternacoes} altas`
-              : "arquivo de reinternações pendente"
-          }
-          tone="default"
-        />
       </div>
+
+      {/* No-return reasons highlight */}
+      {noReturnReasons.length > 0 && (
+        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 mb-3 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-xs font-semibold uppercase tracking-widest text-amber-400 mb-0.5">
+                Além de não ter retorno, quais motivos de não retorno?
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                <strong className="text-amber-300">
+                  {initiationBreakdown!.semRetornoTotal}
+                </strong>{" "}
+                registros sem retorno no recorte — decomposição pela coluna
+                &quot;Ação Iniciação&quot;:
+              </p>
+            </div>
+            <div className="text-3xl font-bold text-amber-300 tabular-nums shrink-0">
+              {initiationBreakdown!.semRetornoTotal}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {noReturnReasons.map((r) => (
+              <span
+                key={r.key}
+                className="rounded-md border border-amber-800/70 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300"
+              >
+                <span className="font-semibold text-amber-200">{r.count}</span>{" "}
+                {r.label}{" "}
+                <span className="text-slate-500">({r.percent}%)</span>
+              </span>
+            ))}
+          </div>
+          <a
+            href="#motivos-nao-retorno"
+            className="inline-flex items-center gap-1 text-xs font-medium text-amber-400 hover:text-amber-300 transition"
+          >
+            Ver análise completa dos motivos
+            <ChevronDown className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      )}
 
       {/* Effectiveness highlight */}
       <div className="rounded-lg border border-teal-800 bg-teal-950/40 p-3 flex flex-col sm:flex-row sm:items-center gap-3">

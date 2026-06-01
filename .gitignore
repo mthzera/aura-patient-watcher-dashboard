@@ -36,6 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# uploaded data (persistido no Vercel Blob em prod; em dev fica só local)
+/data
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel

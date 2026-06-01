@@ -62,6 +62,8 @@ export interface PatientRecord {
   intervention_result: string | null;
   /** "Status" — final monitoring status (Reinternação, Óbito, Pcte Watcher …) */
   monitoring_status: string | null;
+  /** "Ação Iniciação" — concrete action/reason text (used for no-return reasons) */
+  initiation_action: string | null;
   [key: string]: unknown;
 }
 
@@ -225,6 +227,83 @@ export interface ReinternacaoAlertAnalysis {
   matches: ReinternacaoAlertMatch[];
 }
 
+// ---------------------------------------------------------------------------
+// Initiation-action breakdown (motivos, derived from "Ação Iniciação")
+// ---------------------------------------------------------------------------
+
+/** One category of the initiation-action breakdown. */
+export interface InitiationReason {
+  /** Stable key */
+  key:
+    | "semContatoTelefonico"
+    | "unidadeNaoRespondeu"
+    | "retornoBasal"
+    | "retornoComIntervencao"
+    | "naoInformado";
+  /** Human label (pt-BR) */
+  label: string;
+  count: number;
+  /** Percent of the considered total, rounded */
+  percent: number;
+}
+
+/**
+ * Breakdown of every record by its "Ação Iniciação" reason. Opens up "sem
+ * retorno" into its sub-reasons (sem contato telefônico × unidade não
+ * respondeu) and separates retorno basal × retorno com intervenção.
+ */
+export interface InitiationActionBreakdown {
+  /** False when the "Ação Iniciação" column is absent from the data. */
+  available: boolean;
+  /** Total records considered (after filters). */
+  total: number;
+  reasons: InitiationReason[];
+  /** Sum of the two "sem retorno" sub-reasons (sem contato + unidade). */
+  semRetornoTotal: number;
+}
+
+// ---------------------------------------------------------------------------
+// Clinical decompensation analysis (counted by PATIENT-DAY, not by row)
+// ---------------------------------------------------------------------------
+
+/** One sub-category of transient decompensation, counted by patient-day. */
+export interface DecompCategory {
+  key: "basal" | "comIntervencao" | "estavel";
+  label: string;
+  /** Distinct patient-days in this category. */
+  patients: number;
+  /** Percent of the transient total (patient-day), rounded. */
+  percent: number;
+}
+
+/**
+ * Clinical decompensation indicators. Every count is a DISTINCT PATIENT-DAY
+ * (same patient on the same calendar day counts once, regardless of how many
+ * rows/actions exist), not a raw row count.
+ */
+export interface DecompensationAnalysis {
+  /** Distinct patient-days across all filtered records (denominator for %). */
+  scopePatientDays: number;
+  /** Distinct patient-days that had ANY decompensation (transient OR acute). */
+  decompensatedPatientDays: number;
+
+  /** Transient decompensation, split by clinical outcome. */
+  transientTotal: number;
+  transient: DecompCategory[];
+  /** % of transient patient-days that had an effective unit response. */
+  transientEffectiveRate: number;
+  transientEffectivePatients: number;
+
+  /** Acute decompensation. */
+  acuteTotal: number;
+  acuteEffectivePatients: number;
+  acuteEffectiveRate: number;
+  deteriorationReversals: number;
+  /** Acute patient-days with "em monitoramento" — excluded from não reverteu. */
+  acuteMonitoringPatients: number;
+  avoidedReadmissions: number;
+}
+
 /** Response payload from /api/dashboard */
 export interface DashboardResponse {
   metrics: DashboardMetrics;
@@ -232,6 +311,8 @@ export interface DashboardResponse {
   timeSeries: TimeSeriesPoint[];
   responsiveness: ResponsivenessAnalysis;
   reinternacaoAlertAnalysis: ReinternacaoAlertAnalysis;
+  initiationBreakdown: InitiationActionBreakdown;
+  decompensation: DecompensationAnalysis;
   totalRows: number;
   filteredRows: number;
   lastFetchAt: string | null;

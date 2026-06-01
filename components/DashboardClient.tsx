@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DashboardHeader } from "@/components/DashboardHeader";
-import { FiltersBar } from "@/components/FiltersBar";
+import { FiltersBar, type ActiveFilters } from "@/components/FiltersBar";
 import { KpiCard } from "@/components/KpiCard";
 import { ClosedLoopPanel } from "@/components/ClosedLoopPanel";
 import { ClinicalIndicatorsPanel } from "@/components/ClinicalIndicatorsPanel";
@@ -10,6 +10,7 @@ import { UnitManagementTable } from "@/components/UnitManagementTable";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { ImprovementOpportunityPanel } from "@/components/ImprovementOpportunityPanel";
 import { ReinternacaoAlertPanel } from "@/components/ReinternacaoAlertPanel";
+import { InitiationReasonsPanel } from "@/components/InitiationReasonsPanel";
 import { UploadPrompt } from "@/components/UploadPrompt";
 import {
   DashboardResponse,
@@ -21,7 +22,6 @@ import {
   Users,
   Bell,
   CheckCircle,
-  TrendingUp,
   XCircle,
   AlertTriangle,
 } from "lucide-react";
@@ -52,15 +52,6 @@ const EMPTY_METRICS: DashboardMetrics = {
   deteriorationReversals: 0,
   avoidedReadmissions: 0,
 };
-
-interface ActiveFilters {
-  startDate: string;
-  endDate: string;
-  unit: string;
-  clinicalAlteration: string;
-  clinicalOutcome: string;
-  auraActionStatus: string;
-}
 
 const EMPTY_FILTERS: ActiveFilters = {
   startDate: "",
@@ -182,15 +173,9 @@ export function DashboardClient() {
     fetchDashboard(filters);
   }, [filters, fetchDashboard]);
 
-  // Auto-refresh (only when data is loaded)
-  useEffect(() => {
-    if (!data) return;
-    const id = setInterval(
-      () => fetchDashboard(filtersRef.current),
-      REFRESH_SECONDS * 1000
-    );
-    return () => clearInterval(id);
-  }, [data, fetchDashboard]);
+  // Sem auto-refresh: os dados vêm de um CSV físico importado e só mudam
+  // quando o usuário faz um novo upload ou clica em "Recarregar". Nada de
+  // polling em segundo plano alterando os números sozinho.
 
   // Show upload screen when no file has been uploaded yet
   if (!isLoading && error && isNoFileError(error)) {
@@ -262,7 +247,7 @@ export function DashboardClient() {
         )}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <KpiCard
             label="Registros analisados"
             value={metrics.totalRecords}
@@ -289,13 +274,6 @@ export function DashboardClient() {
             variant="success"
           />
           <KpiCard
-            label="Efetividade do ciclo fechado"
-            value={`${metrics.closedLoopEffectivenessRate}%`}
-            subtitle="Casos com atuação → desfecho favorável"
-            icon={<TrendingUp className="h-4 w-4" />}
-            highlight
-          />
-          <KpiCard
             label="Casos sem retorno"
             value={metrics.noReturnCases}
             subtitle="Ciclo assistencial não fechado"
@@ -309,9 +287,10 @@ export function DashboardClient() {
           <>
             <ClosedLoopPanel
               metrics={metrics}
-              reinternacaoAlertAnalysis={data.reinternacaoAlertAnalysis}
+              initiationBreakdown={data.initiationBreakdown}
             />
-            <ClinicalIndicatorsPanel metrics={metrics} />
+            <InitiationReasonsPanel breakdown={data.initiationBreakdown} />
+            <ClinicalIndicatorsPanel decompensation={data.decompensation} />
             <ReinternacaoAlertPanel
               analysis={data.reinternacaoAlertAnalysis}
             />

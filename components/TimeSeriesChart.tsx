@@ -24,8 +24,6 @@ const SERIES = [
   { key: "noReturnCases", label: "Sem retorno", color: "#f87171" },
 ] as const;
 
-// Reference bands (média diária por quinzena). Ajuste estes valores para
-// recalibrar os patamares de baixo / médio / alto.
 const REFERENCE_LINES = [
   { value: 8, label: "Baixo", color: "#34d399" },
   { value: 16, label: "Médio", color: "#fbbf24" },
@@ -46,8 +44,6 @@ export function TimeSeriesChart({ data }: Props) {
     );
   }
 
-  // Each point is a 15-day bucket starting at `date`; the range label
-  // (início – fim) is shown in the tooltip.
   const formatted = data.map((d) => ({
     ...d,
     dateLabel: formatDateLabel(d.date),
@@ -136,7 +132,6 @@ function formatDateLabel(iso: string): string {
   return `${day}/${month}`;
 }
 
-/** "05/01 – 19/01": the 15-day window starting at the bucket date. */
 function formatRangeLabel(iso: string): string {
   const startMs = Date.parse(`${iso}T00:00:00Z`);
   const endMs = startMs + 14 * 86_400_000;

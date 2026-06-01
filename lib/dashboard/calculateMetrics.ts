@@ -12,8 +12,13 @@ import {
   TimeSeriesPoint,
   TemporalBucket,
   ResponsivenessAnalysis,
+  InitiationActionBreakdown,
+  InitiationReason,
+  DecompensationAnalysis,
+  DecompCategory,
 } from "./types";
 import { parseDate } from "./applyFilters";
+import { getHour, getShift, SHIFT_ORDER } from "./shift";
 
 // ---------------------------------------------------------------------------
 // Classification helpers — adjust strings here to match your spreadsheet
@@ -65,6 +70,9 @@ const TRANSIENT_PHRASES = [
 
 /** Acute decompensation classification phrases. */
 const ACUTE_PHRASES = ["descompensação aguda", "descompensacao aguda"];
+
+/** Clinical outcomes that mean the case is still under monitoring (not a final acute outcome). */
+const MONITORING_OUTCOME_PHRASES = ["em monitoramento", "monitorando"];
 
 /**
  * Returns true if the record has a documented unit action / response.
@@ -171,9 +179,20 @@ function isAcuteDecompensation(record: PatientRecord): boolean {
   return ACUTE_PHRASES.some((p) => alt.includes(normalize(p)));
 }
 
+function isMonitoringOutcome(record: PatientRecord): boolean {
+  const outcome = normalize(record.clinical_outcome);
+  if (!outcome) return false;
+  if (outcome.includes("fim do monitoramento")) return false;
+  return MONITORING_OUTCOME_PHRASES.some((p) => outcome.includes(p));
+}
+
 function isDeteriorationReversal(record: PatientRecord): boolean {
   // Acute case with a favorable outcome = clinical deterioration reversed
-  return isAcuteDecompensation(record) && isFavorableOutcome(record);
+  return (
+    isAcuteDecompensation(record) &&
+    isFavorableOutcome(record) &&
+    !isMonitoringOutcome(record)
+  );
 }
 
 /**
@@ -295,6 +314,233 @@ export function calculateMetrics(records: PatientRecord[]): DashboardMetrics {
 }
 
 // ---------------------------------------------------------------------------
+// Initiation-action breakdown (motivos) — derived from "Ação Iniciação"
+// ---------------------------------------------------------------------------
+
+type InitiationKey = InitiationReason["key"];
+
+/**
+ * Classify a record by its "Ação Iniciação" text. Handles the real-world
+ * typos/case variants seen in the data ("sem retono/retrono da unidade",
+ * "alertado/Alertado via TEAMS").
+ */
+export function classifyInitiation(record: PatientRecord): InitiationKey {
+  const n = normalize(record.initiation_action as string | null | undefined);
+
+  // Empty / administrative / non-clinical → not a real outcome
+  if (
+    !n ||
+    n.includes("finitude") ||
+    n.includes("erro de registro") ||
+    n.includes("erro de digit") ||
+    n.includes("notificado erro")
+  ) {
+    return "naoInformado";
+  }
+
+  // "Sem retorno de contato telefônico" → não atendeu / sem contato
+  if (n.includes("contato telefon")) return "semContatoTelefonico";
+
+  // "sem retorno da unidade" (+ typos) → unidade não respondeu
+  if (n.includes("unidade") && n.includes("sem ret")) return "unidadeNaoRespondeu";
+
+  // "Reavaliado, Basal" → retorno basal
+  if (n.includes("basal")) return "retornoBasal";
+
+  // Everything else with a concrete action = retorno com intervenção/acompanhamento
+  return "retornoComIntervencao";
+}
+
+const INITIATION_LABELS: Record<InitiationKey, string> = {
+  semContatoTelefonico: "Sem contato telefônico",
+  unidadeNaoRespondeu: "Unidade não respondeu",
+  retornoBasal: "Retorno basal",
+  retornoComIntervencao: "Retorno com intervenção",
+  naoInformado: "Não informado",
+};
+
+// Display order: positive returns first, then the no-return reasons, then N/A.
+const INITIATION_ORDER: InitiationKey[] = [
+  "retornoComIntervencao",
+  "retornoBasal",
+  "semContatoTelefonico",
+  "unidadeNaoRespondeu",
+  "naoInformado",
+];
+
+export function calculateInitiationBreakdown(
+  records: PatientRecord[]
+): InitiationActionBreakdown {
+  // If no record carries the column at all, mark unavailable.
+  const hasColumn = records.some(
+    (r) => r.initiation_action !== undefined && r.initiation_action !== null
+  );
+
+  const counts: Record<InitiationKey, number> = {
+    semContatoTelefonico: 0,
+    unidadeNaoRespondeu: 0,
+    retornoBasal: 0,
+    retornoComIntervencao: 0,
+    naoInformado: 0,
+  };
+
+  for (const r of records) {
+    counts[classifyInitiation(r)] += 1;
+  }
+
+  const total = records.length;
+  const reasons: InitiationReason[] = INITIATION_ORDER.map((key) => ({
+    key,
+    label: INITIATION_LABELS[key],
+    count: counts[key],
+    percent: total > 0 ? Math.round((counts[key] / total) * 100) : 0,
+  }));
+
+  return {
+    available: hasColumn,
+    total,
+    reasons,
+    semRetornoTotal: counts.semContatoTelefonico + counts.unidadeNaoRespondeu,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Clinical decompensation — counted by PATIENT-DAY (not by row)
+// ---------------------------------------------------------------------------
+
+/** Stable key for a (patient, calendar-day) pair, or null if unidentifiable. */
+function patientDayKey(r: PatientRecord): string | null {
+  const name = normalize(r.patient_name);
+  const day = parseDate(r.date);
+  if (!name || !day) return null;
+  return `${name}|${day}`;
+}
+
+/** Count distinct patient-days in a record set. */
+function countPatientDays(records: PatientRecord[]): number {
+  const set = new Set<string>();
+  for (const r of records) {
+    const k = patientDayKey(r);
+    if (k) set.add(k);
+  }
+  return set.size;
+}
+
+/** Map a transient record's clinical outcome to its sub-category. */
+function transientCategory(
+  outcome: string | null | undefined
+): DecompCategory["key"] | null {
+  const o = normalize(outcome);
+  if (o.includes("condicao basal") || o === "basal") return "basal";
+  if (o.includes("melhora")) return "comIntervencao";
+  if (o.includes("estabiliza")) return "estavel";
+  return null;
+}
+
+const TRANSIENT_LABELS: Record<DecompCategory["key"], string> = {
+  basal: "Transitória basal",
+  comIntervencao: "Transitória com intervenção",
+  estavel: "Estável",
+};
+
+/**
+ * Build the decompensation analysis. Every figure is a DISTINCT PATIENT-DAY:
+ * the same patient on the same day counts once no matter how many rows/actions
+ * exist. Transient decompensation is split by clinical outcome into
+ * basal / com intervenção (melhora) / estável.
+ */
+export function calculateDecompensation(
+  records: PatientRecord[]
+): DecompensationAnalysis {
+  const scopePatientDays = countPatientDays(records);
+
+  // --- Transient ---
+  const transientRecs = records.filter(isTransientDecompensation);
+  const transientDays = new Set<string>();
+  const transientEffectiveDays = new Set<string>();
+  // patient-day → set of sub-categories seen that day
+  const dayCats = new Map<string, Set<DecompCategory["key"]>>();
+
+  for (const r of transientRecs) {
+    const k = patientDayKey(r);
+    if (!k) continue;
+    transientDays.add(k);
+    if (hasUnitAction(r)) transientEffectiveDays.add(k);
+    const cat = transientCategory(r.clinical_outcome);
+    if (cat) {
+      if (!dayCats.has(k)) dayCats.set(k, new Set());
+      dayCats.get(k)!.add(cat);
+    }
+  }
+
+  // One category per patient-day, by priority (basal > melhora > estável).
+  const priority: DecompCategory["key"][] = ["basal", "comIntervencao", "estavel"];
+  const counts: Record<DecompCategory["key"], number> = {
+    basal: 0,
+    comIntervencao: 0,
+    estavel: 0,
+  };
+  for (const cats of dayCats.values()) {
+    const chosen = priority.find((p) => cats.has(p));
+    if (chosen) counts[chosen] += 1;
+  }
+
+  const transientTotal = transientDays.size;
+  const transient: DecompCategory[] = priority.map((key) => ({
+    key,
+    label: TRANSIENT_LABELS[key],
+    patients: counts[key],
+    percent:
+      transientTotal > 0 ? Math.round((counts[key] / transientTotal) * 100) : 0,
+  }));
+
+  // --- Acute ---
+  const acuteRecs = records.filter(isAcuteDecompensation);
+  const acuteDays = new Set<string>();
+  const acuteEffectiveDays = new Set<string>();
+  const reversalDays = new Set<string>();
+  const monitoringDays = new Set<string>();
+  const avoidedDays = new Set<string>();
+
+  for (const r of acuteRecs) {
+    const k = patientDayKey(r);
+    if (!k) continue;
+    acuteDays.add(k);
+    if (hasUnitAction(r)) acuteEffectiveDays.add(k);
+    if (isDeteriorationReversal(r)) reversalDays.add(k);
+    else if (isMonitoringOutcome(r)) monitoringDays.add(k);
+    if (hasUnitAction(r) && isFavorableOutcome(r)) avoidedDays.add(k);
+  }
+
+  const acuteTotal = acuteDays.size;
+  const acuteMonitoringPatients = monitoringDays.size;
+
+  // Patient-days with ANY decompensation (union; a day can be both).
+  const decompensatedPatientDays = new Set([...transientDays, ...acuteDays]).size;
+
+  return {
+    scopePatientDays,
+    decompensatedPatientDays,
+    transientTotal,
+    transient,
+    transientEffectivePatients: transientEffectiveDays.size,
+    transientEffectiveRate:
+      transientTotal > 0
+        ? Math.round((transientEffectiveDays.size / transientTotal) * 100)
+        : 0,
+    acuteTotal,
+    acuteEffectivePatients: acuteEffectiveDays.size,
+    acuteEffectiveRate:
+      acuteTotal > 0
+        ? Math.round((acuteEffectiveDays.size / acuteTotal) * 100)
+        : 0,
+    deteriorationReversals: reversalDays.size,
+    acuteMonitoringPatients,
+    avoidedReadmissions: avoidedDays.size,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Per-unit summary
 // ---------------------------------------------------------------------------
 
@@ -344,32 +590,21 @@ export function calculateUnitSummaries(
 // ---------------------------------------------------------------------------
 
 const MS_PER_DAY = 86_400_000;
-
-/** Days covered by each time-series bucket. */
 const BUCKET_DAYS = 15;
 
-/** Parse an ISO date (YYYY-MM-DD) to UTC milliseconds. */
 function isoToMs(iso: string): number {
   return Date.parse(`${iso}T00:00:00Z`);
 }
 
-/** Round to one decimal place. */
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
 /**
- * Build the evolution time series, aggregating records into fixed 15-day
- * buckets anchored at the earliest date in the dataset. Each point holds the
- * DAILY AVERAGE of the four series within its window (total ÷ number of days
- * covered), so the line reads as a smoothed fortnightly evolution on the same
- * per-day scale. The point's `date` is the window start (used as the X-axis
- * label). The last window may be partial, so it's divided by the days it
- * actually spans.
+ * Build the evolution time series in 15-day buckets. Each point is the daily
+ * average within its window.
  */
-export function buildTimeSeries(
-  records: PatientRecord[]
-): TimeSeriesPoint[] {
+export function buildTimeSeries(records: PatientRecord[]): TimeSeriesPoint[] {
   const dated = records
     .map((r) => ({ date: parseDate(r.date), record: r }))
     .filter((x): x is { date: string; record: PatientRecord } => !!x.date);
@@ -398,10 +633,8 @@ export function buildTimeSeries(
   const points: TimeSeriesPoint[] = [];
 
   for (const [date, recs] of byBucket) {
-    // Days actually covered by this window: a full 15, or fewer for the last,
-    // partial window that runs up to the dataset's max date.
     const spanDays = Math.floor((maxMs - isoToMs(date)) / MS_PER_DAY) + 1;
-    const days = Math.min(BUCKET_DAYS, spanDays);
+    const days = Math.min(BUCKET_DAYS, Math.max(1, spanDays));
 
     points.push({
       date,
@@ -419,7 +652,6 @@ export function buildTimeSeries(
 // Temporal responsiveness analysis — WHEN does the loop break / respond best
 // ---------------------------------------------------------------------------
 
-const SHIFT_ORDER = ["MANHÃ", "TARDE", "NOITE", "MADRUGADA"];
 const DOW_LABELS = [
   "Domingo",
   "Segunda",
@@ -444,32 +676,6 @@ const WEEKEND_LABELS = new Set(["Sábado", "Domingo"]);
 
 function pct(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 100) : 0;
-}
-
-/** Derive the work shift from the explicit column, falling back to the hour. */
-function getShift(record: PatientRecord): string | null {
-  const raw = normalize(record.shift as string | null | undefined);
-  if (raw) {
-    if (raw.startsWith("manh")) return "MANHÃ";
-    if (raw.startsWith("tard")) return "TARDE";
-    if (raw.startsWith("noit")) return "NOITE";
-    if (raw.startsWith("madrug")) return "MADRUGADA";
-  }
-  const hour = getHour(record);
-  if (hour === null) return null;
-  if (hour >= 6 && hour <= 11) return "MANHÃ";
-  if (hour >= 12 && hour <= 17) return "TARDE";
-  if (hour >= 18 && hour <= 23) return "NOITE";
-  return "MADRUGADA";
-}
-
-/** Extract the hour (0–23) from the event-time column ("HH:MM:SS"). */
-function getHour(record: PatientRecord): number | null {
-  const raw = String(record.event_time ?? "").trim();
-  const m = raw.match(/^(\d{1,2}):/);
-  if (!m) return null;
-  const h = parseInt(m[1], 10);
-  return h >= 0 && h <= 23 ? h : null;
 }
 
 /** Day of week (0=Sun..6=Sat) derived from the record date. */

@@ -62,9 +62,16 @@ function isReinternacao(conditionOnDischarge: string | null): boolean {
 // Main export
 // ---------------------------------------------------------------------------
 
+/** Optional date window (ISO YYYY-MM-DD) applied to the reinternação's discharge date. */
+interface DateRange {
+  startDate?: string;
+  endDate?: string;
+}
+
 export function buildReinternacaoAlertAnalysis(
   records: PatientRecord[],
-  reinternacoes: ReinternacaoRecord[]
+  reinternacoes: ReinternacaoRecord[],
+  dateRange?: DateRange
 ): ReinternacaoAlertAnalysis {
   if (reinternacoes.length === 0) {
     return {
@@ -76,10 +83,23 @@ export function buildReinternacaoAlertAnalysis(
     };
   }
 
-  // Only hospitalizations/readmissions and deaths
-  const hospitalizations = reinternacoes.filter((r) =>
-    isReinternacao(r.conditionOnDischarge)
-  );
+  // Only hospitalizations/readmissions and deaths, optionally restricted to the
+  // dashboard's date filter (by the reinternação's discharge date). The unit and
+  // other filters are intentionally NOT applied here: the reinternação file has
+  // its own timeline/branch, so only the date window is meaningful. The prior-
+  // alert lookup below still scans ALL patient records to keep the "10 days
+  // before" window intact.
+  const hospitalizations = reinternacoes.filter((r) => {
+    if (!isReinternacao(r.conditionOnDischarge)) return false;
+    if (dateRange?.startDate || dateRange?.endDate) {
+      const d = parseDate(r.dischargeDate);
+      if (d) {
+        if (dateRange.startDate && d < dateRange.startDate) return false;
+        if (dateRange.endDate && d > dateRange.endDate) return false;
+      }
+    }
+    return true;
+  });
 
   if (hospitalizations.length === 0) {
     return {

@@ -6,6 +6,8 @@ import {
   calculateUnitSummaries,
   buildTimeSeries,
   calculateResponsiveness,
+  calculateInitiationBreakdown,
+  calculateDecompensation,
 } from "@/lib/dashboard/calculateMetrics";
 import { parseReinternacoes } from "@/lib/csv/parseReinternacoes";
 import { buildReinternacaoAlertAnalysis } from "@/lib/dashboard/buildReinternacaoAnalysis";
@@ -35,7 +37,15 @@ export async function GET(request: NextRequest) {
       unitSummaries: calculateUnitSummaries(filtered),
       timeSeries: buildTimeSeries(filtered),
       responsiveness: calculateResponsiveness(filtered),
-      reinternacaoAlertAnalysis: buildReinternacaoAlertAnalysis(rows, reinternacoes),
+      initiationBreakdown: calculateInitiationBreakdown(filtered),
+      decompensation: calculateDecompensation(filtered),
+      // Reinternações × Aura segue APENAS o filtro de data (pela Data Alta da
+      // reinternação). Unidade/demais filtros não se aplicam aqui. A busca de
+      // alertas nos 10 dias anteriores usa todos os registros (rows).
+      reinternacaoAlertAnalysis: buildReinternacaoAlertAnalysis(rows, reinternacoes, {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      }),
       totalRows: rows.length,
       filteredRows: filtered.length,
       lastFetchAt,

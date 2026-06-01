@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { FiltersResponse } from "@/lib/dashboard/types";
 
-interface ActiveFilters {
+export interface ActiveFilters {
   startDate: string;
   endDate: string;
   unit: string;
@@ -27,7 +27,13 @@ export function FiltersBar({ filters, filterOptions, onChange, onClear }: Props)
     onChange({ ...filters, [key]: value });
   }
 
-  const hasActiveFilters = Object.values(filters).some((v) => v !== "");
+  const hasActiveFilters =
+    filters.unit !== "" ||
+    filters.clinicalAlteration !== "" ||
+    filters.clinicalOutcome !== "" ||
+    filters.auraActionStatus !== "" ||
+    filters.startDate !== "" ||
+    filters.endDate !== "";
 
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-800/40 px-5 py-4">
@@ -97,34 +103,43 @@ export function FiltersBar({ filters, filterOptions, onChange, onClear }: Props)
         <SelectFilter
           label="Unidade"
           value={filters.unit}
-          options={filterOptions?.units ?? []}
+          options={(filterOptions?.units ?? []).map((u) => ({
+            value: u,
+            label: u,
+          }))}
           onChange={(v) => update("unit", v)}
           placeholder="Todas as unidades"
         />
 
-        {/* Clinical alteration */}
         <SelectFilter
           label="Alteração clínica"
           value={filters.clinicalAlteration}
-          options={filterOptions?.clinicalAlterationTypes ?? []}
+          options={(filterOptions?.clinicalAlterationTypes ?? []).map((u) => ({
+            value: u,
+            label: u,
+          }))}
           onChange={(v) => update("clinicalAlteration", v)}
           placeholder="Todas"
         />
 
-        {/* Clinical outcome */}
         <SelectFilter
           label="Desfecho clínico"
           value={filters.clinicalOutcome}
-          options={filterOptions?.clinicalOutcomes ?? []}
+          options={(filterOptions?.clinicalOutcomes ?? []).map((u) => ({
+            value: u,
+            label: u,
+          }))}
           onChange={(v) => update("clinicalOutcome", v)}
           placeholder="Todos"
         />
 
-        {/* AURA action status */}
         <SelectFilter
           label="Atuação AURA"
           value={filters.auraActionStatus}
-          options={filterOptions?.auraActionStatuses ?? []}
+          options={(filterOptions?.auraActionStatuses ?? []).map((u) => ({
+            value: u,
+            label: u,
+          }))}
           onChange={(v) => update("auraActionStatus", v)}
           placeholder="Todas"
         />
@@ -150,13 +165,19 @@ function SelectFilter({
   options,
   onChange,
   placeholder,
+  hideBlankOption,
 }: {
   label: string;
   value: string;
-  options: string[];
+  options: { value: string; label: string }[] | string[];
   onChange: (v: string) => void;
   placeholder: string;
+  hideBlankOption?: boolean;
 }) {
+  const normalized = options.map((opt) =>
+    typeof opt === "string" ? { value: opt, label: opt } : opt
+  );
+
   return (
     <div className="flex flex-col gap-1 min-w-[160px]">
       <label className="text-xs text-slate-400 uppercase tracking-wide">
@@ -167,10 +188,10 @@ function SelectFilter({
         onChange={(e) => onChange(e.target.value)}
         className="rounded-md border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 focus:border-teal-500 focus:outline-none"
       >
-        <option value="">{placeholder}</option>
-        {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
+        {!hideBlankOption && <option value="">{placeholder}</option>}
+        {normalized.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>

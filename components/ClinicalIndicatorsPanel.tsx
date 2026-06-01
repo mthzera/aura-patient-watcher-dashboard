@@ -1,26 +1,35 @@
 "use client";
 
-import { DashboardMetrics } from "@/lib/dashboard/types";
+import { DecompensationAnalysis } from "@/lib/dashboard/types";
 
 interface Props {
-  metrics: DashboardMetrics;
+  decompensation?: DecompensationAnalysis;
 }
 
-export function ClinicalIndicatorsPanel({ metrics }: Props) {
-  const transientPct = pct(metrics.transientDecompensations, metrics.totalRecords);
-  const acutePct = pct(metrics.acuteDecompensations, metrics.totalRecords);
-  const acuteEffectivePct = pct(
-    metrics.acuteEffectiveActions,
-    metrics.acuteDecompensations
+export function ClinicalIndicatorsPanel({ decompensation }: Props) {
+  if (!decompensation) return null;
+
+  const d = decompensation;
+  const transientPct = pct(d.transientTotal, d.scopePatientDays);
+  const acutePct = pct(d.acuteTotal, d.scopePatientDays);
+
+  // The 3 outcome buckets may not sum to the transient total — the remainder
+  // are patient-days with other outcomes (erro de registro, finitude, etc.).
+  const classified = d.transient.reduce((s, c) => s + c.patients, 0);
+  const otherCount = Math.max(0, d.transientTotal - classified);
+
+  const acuteMonitoring = d.acuteMonitoringPatients ?? 0;
+  const acuteNonReversal = Math.max(
+    0,
+    d.acuteTotal - d.deteriorationReversals - acuteMonitoring
   );
-  const deteriorationPct = pct(
-    metrics.deteriorationReversals,
-    metrics.acuteDecompensations
-  );
-  const avoidedReadmissionsPct = pct(
-    metrics.avoidedReadmissions,
-    metrics.acuteDecompensations
-  );
+
+  // Patient-days with no decompensation event (routine/stable monitoring).
+  // Fall back if an older API response lacks decompensatedPatientDays.
+  const decompUnion = Number.isFinite(d.decompensatedPatientDays)
+    ? d.decompensatedPatientDays
+    : Math.min(d.scopePatientDays, d.transientTotal + d.acuteTotal);
+  const semDescompensacao = Math.max(0, d.scopePatientDays - decompUnion);
 
   return (
     <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-5">
@@ -29,60 +38,118 @@ export function ClinicalIndicatorsPanel({ metrics }: Props) {
           Indicadores clínicos de apoio
         </h2>
         <p className="mt-1 text-xs text-slate-500">
-          Contagem e percentual sobre os registros filtrados ou sobre o grupo clínico.
+          Contagem por{" "}
+          <strong className="text-slate-300">paciente-dia</strong> — o mesmo
+          paciente no mesmo dia conta 1 vez (não importa quantas ações). Total
+          no recorte:{" "}
+          <strong className="text-slate-300">{d.scopePatientDays}</strong>{" "}
+          pacientes-dia.
         </p>
       </div>
 
+      {/* Reconciliation summary: where all scope patient-days go */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-xs">
+        <span className="text-slate-300">
+          <strong className="text-slate-100">{semDescompensacao}</strong> Sem
+          descompensação ({pct(semDescompensacao, d.scopePatientDays)}%)
+        </span>
+        <span className="text-amber-300/90">
+          <strong>{d.transientTotal}</strong> Transitória (
+          {pct(d.transientTotal, d.scopePatientDays)}%)
+        </span>
+        <span className="text-rose-300/90">
+          <strong>{d.acuteTotal}</strong> Aguda (
+          {pct(d.acuteTotal, d.scopePatientDays)}%)
+        </span>
+        <span className="text-slate-500">= {d.scopePatientDays} no total</span>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Transient decompensation */}
+        {/* Transient decompensation — split in 3 (+ outros) */}
         <div className="rounded-lg border border-slate-600 bg-slate-900/60 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-3">
-            Descompensação Transitória
+          <div className="flex items-baseline justify-between mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+              Descompensação Transitória
+            </span>
+            <span className="text-xs text-slate-400">
+              <strong className="text-slate-200">{d.transientTotal}</strong> de{" "}
+              {d.scopePatientDays} pacientes-dia ({transientPct}%)
+            </span>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <p className="text-[11px] text-slate-500 mb-3">
+            Desfecho dos {d.transientTotal} pacientes-dia transitórios:
+          </p>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            {d.transient.map((c) => (
+              <Stat
+                key={c.key}
+                label={c.label}
+                value={c.patients}
+                percent={`${c.percent}%`}
+                sub={`de ${d.transientTotal} transitórios`}
+              />
+            ))}
             <Stat
-              label="Casos"
-              value={metrics.transientDecompensations}
-              percent={`${transientPct}%`}
-              sub="dos registros"
+              label="Outros desfechos"
+              value={otherCount}
+              percent={`${pct(otherCount, d.transientTotal)}%`}
+              sub="erro/finitude/monitorando"
+              muted
             />
+          </div>
+
+          <div className="border-t border-slate-700 mt-3 pt-2">
             <Stat
-              label="Taxa de atuação efetiva"
-              value={`${metrics.transientEffectiveRate}%`}
-              sub={`${metrics.transientEffectiveActions} atuações`}
+              label="Pacientes-dia com atuação efetiva da unidade"
+              value={`${d.transientEffectivePatients} de ${d.transientTotal}`}
+              percent={`${d.transientEffectiveRate}%`}
+              sub="o restante não teve atuação efetiva"
             />
           </div>
         </div>
 
         {/* Acute decompensation */}
         <div className="rounded-lg border border-slate-600 bg-slate-900/60 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-rose-400 mb-3">
-            Descompensação Aguda
+          <div className="flex items-baseline justify-between mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-rose-400">
+              Descompensação Aguda
+            </span>
+            <span className="text-xs text-slate-400">
+              <strong className="text-slate-200">{d.acuteTotal}</strong> de{" "}
+              {d.scopePatientDays} pacientes-dia ({acutePct}%)
+            </span>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <p className="text-[11px] text-slate-500 mb-3">
+            Desfecho dos {d.acuteTotal} pacientes-dia agudos:
+          </p>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             <Stat
-              label="Casos"
-              value={metrics.acuteDecompensations}
-              percent={`${acutePct}%`}
-              sub="dos registros"
+              label="Reverteu a deterioração"
+              value={d.deteriorationReversals}
+              percent={`${pct(d.deteriorationReversals, d.acuteTotal)}%`}
+              sub="desfecho favorável (melhora/basal/estabilização)"
             />
             <Stat
-              label="Atuações efetivas"
-              value={metrics.acuteEffectiveActions}
-              percent={`${acuteEffectivePct}%`}
-              sub="das agudas"
-            />
-            <Stat
-              label="Taxa de atuação"
-              value={`${metrics.acuteEffectiveRate}%`}
-            />
-            <Stat
-              label="Reversões de deterioração"
-              value={metrics.deteriorationReversals}
-              percent={`${deteriorationPct}%`}
-              sub="das agudas"
+              label="Não reverteu"
+              value={acuteNonReversal}
+              percent={`${pct(acuteNonReversal, d.acuteTotal)}%`}
+              sub="finitude / reinternação"
+              muted
             />
           </div>
+          <p className="text-[11px] text-slate-600 mt-3">
+            {acuteMonitoring > 0
+              ? `${acuteMonitoring} paciente${acuteMonitoring === 1 ? "" : "s"}-dia em monitoramento não entram nesta classificação (ver transitória). `
+              : ""}
+            Reverteu + não reverteu
+            {acuteMonitoring > 0
+              ? ` = ${d.deteriorationReversals + acuteNonReversal} de ${d.acuteTotal}`
+              : ` = ${d.acuteTotal}`}
+            . Dessas reversões, {d.avoidedReadmissions} tiveram atuação
+            documentada da unidade.
+          </p>
         </div>
       </div>
 
@@ -94,19 +161,19 @@ export function ClinicalIndicatorsPanel({ metrics }: Props) {
               Internações potencialmente evitadas
             </div>
             <p className="text-xs text-slate-500 max-w-lg">
-              Casos de descompensação aguda com atuação documentada e desfecho
-              favorável — estimativa conservadora de internações evitadas pela
-              resposta oportuna.
+              Pacientes-dia de descompensação aguda com atuação documentada e
+              desfecho favorável — estimativa conservadora de internações
+              evitadas pela resposta oportuna.
             </p>
           </div>
           <div className="ml-4 shrink-0 text-right">
             <div className="text-3xl font-bold text-emerald-300 tabular-nums">
-              {metrics.avoidedReadmissions}
+              {d.avoidedReadmissions}
             </div>
-            <div className="text-lg font-bold text-emerald-400 tabular-nums">
-              {avoidedReadmissionsPct}%
+            <div className="text-sm font-bold text-emerald-400 tabular-nums">
+              {d.avoidedReadmissions} de {d.acuteTotal} agudos (
+              {pct(d.avoidedReadmissions, d.acuteTotal)}%)
             </div>
-            <div className="text-[11px] text-slate-500">das agudas</div>
           </div>
         </div>
       </div>
@@ -119,16 +186,24 @@ function Stat({
   value,
   percent,
   sub,
+  muted,
 }: {
   label: string;
   value: string | number;
   percent?: string;
   sub?: string;
+  muted?: boolean;
 }) {
   return (
     <div>
       <div className="flex items-baseline gap-2">
-        <span className="text-xl font-bold text-white tabular-nums">{value}</span>
+        <span
+          className={`text-xl font-bold tabular-nums ${
+            muted ? "text-slate-400" : "text-white"
+          }`}
+        >
+          {value}
+        </span>
         {percent && (
           <span className="text-sm font-bold text-slate-300 tabular-nums">
             {percent}
@@ -142,5 +217,7 @@ function Stat({
 }
 
 function pct(part: number, total: number): number {
-  return total > 0 ? Math.round((part / total) * 100) : 0;
+  if (!total || !Number.isFinite(part) || !Number.isFinite(total)) return 0;
+  const v = Math.round((part / total) * 100);
+  return Number.isFinite(v) ? v : 0;
 }
