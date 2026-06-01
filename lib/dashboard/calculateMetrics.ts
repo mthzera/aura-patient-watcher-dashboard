@@ -343,72 +343,32 @@ export function calculateUnitSummaries(
 // Time-series aggregation
 // ---------------------------------------------------------------------------
 
-const MS_PER_DAY = 86_400_000;
-
-/** Days covered by each time-series bucket. */
-const BUCKET_DAYS = 15;
-
-/** Parse an ISO date (YYYY-MM-DD) to UTC milliseconds. */
-function isoToMs(iso: string): number {
-  return Date.parse(`${iso}T00:00:00Z`);
-}
-
-/** Round to one decimal place. */
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
 /**
- * Build the evolution time series, aggregating records into fixed 15-day
- * buckets anchored at the earliest date in the dataset. Each point holds the
- * DAILY AVERAGE of the four series within its window (total ÷ number of days
- * covered), so the line reads as a smoothed fortnightly evolution on the same
- * per-day scale as before. The point's `date` is the window start (used as the
- * X-axis label). The last window may be partial, so it's divided by the days
- * it actually spans.
+ * Build the evolution time series with one point PER DAY, so the day-to-day
+ * variation is visible. The X axis only labels every ~15 days (handled in the
+ * chart component) to keep it readable.
  */
 export function buildTimeSeries(
   records: PatientRecord[]
 ): TimeSeriesPoint[] {
-  const dated = records
-    .map((r) => ({ date: parseDate(r.date), record: r }))
-    .filter((x): x is { date: string; record: PatientRecord } => !!x.date);
+  const byDate = new Map<string, PatientRecord[]>();
 
-  if (dated.length === 0) return [];
-
-  let minMs = Infinity;
-  let maxMs = -Infinity;
-  for (const { date } of dated) {
-    const ms = isoToMs(date);
-    if (ms < minMs) minMs = ms;
-    if (ms > maxMs) maxMs = ms;
-  }
-
-  const byBucket = new Map<string, PatientRecord[]>();
-
-  for (const { date, record } of dated) {
-    const dayDiff = Math.floor((isoToMs(date) - minMs) / MS_PER_DAY);
-    const bucketIndex = Math.floor(dayDiff / BUCKET_DAYS);
-    const bucketStartMs = minMs + bucketIndex * BUCKET_DAYS * MS_PER_DAY;
-    const key = new Date(bucketStartMs).toISOString().slice(0, 10);
-    if (!byBucket.has(key)) byBucket.set(key, []);
-    byBucket.get(key)!.push(record);
+  for (const r of records) {
+    const date = parseDate(r.date);
+    if (!date) continue;
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date)!.push(r);
   }
 
   const points: TimeSeriesPoint[] = [];
 
-  for (const [date, recs] of byBucket) {
-    // Days actually covered by this window: a full 15, or fewer for the last,
-    // partial window that runs up to the dataset's max date.
-    const spanDays = Math.floor((maxMs - isoToMs(date)) / MS_PER_DAY) + 1;
-    const days = Math.min(BUCKET_DAYS, spanDays);
-
+  for (const [date, recs] of byDate) {
     points.push({
       date,
-      auraAlerts: round1(recs.filter(isAuraAlerted).length / days),
-      unitActions: round1(recs.filter(hasUnitAction).length / days),
-      favorableOutcomes: round1(recs.filter(isFavorableOutcome).length / days),
-      noReturnCases: round1(recs.filter(isNoReturn).length / days),
+      auraAlerts: recs.filter(isAuraAlerted).length,
+      unitActions: recs.filter(hasUnitAction).length,
+      favorableOutcomes: recs.filter(isFavorableOutcome).length,
+      noReturnCases: recs.filter(isNoReturn).length,
     });
   }
 

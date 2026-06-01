@@ -37,13 +37,13 @@ export function TimeSeriesChart({ data }: Props) {
     );
   }
 
-  // Format date labels for the X axis. Each point is a 15-day bucket starting
-  // at `date`; we also keep a range label (start–end) for the tooltip.
+  // One point per day so the day-to-day variation shows. To keep the axis
+  // readable we only label every ~15 days (computed below).
   const formatted = data.map((d) => ({
     ...d,
     dateLabel: formatDateLabel(d.date),
-    rangeLabel: formatRangeLabel(d.date),
   }));
+  const ticks = pickTicks(formatted);
 
   return (
     <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-6">
@@ -51,7 +51,7 @@ export function TimeSeriesChart({ data }: Props) {
         Evolução no tempo
       </h2>
       <p className="text-xs text-slate-500 mb-5">
-        Média diária por quinzena (janelas de 15 dias)
+        Valores diários (eixo marcado a cada 15 dias)
       </p>
 
       <ResponsiveContainer width="100%" height={280}>
@@ -62,6 +62,8 @@ export function TimeSeriesChart({ data }: Props) {
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
           <XAxis
             dataKey="dateLabel"
+            ticks={ticks}
+            interval={0}
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             axisLine={{ stroke: "#334155" }}
             tickLine={false}
@@ -70,7 +72,7 @@ export function TimeSeriesChart({ data }: Props) {
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            allowDecimals
+            allowDecimals={false}
           />
           <Tooltip
             contentStyle={{
@@ -81,9 +83,6 @@ export function TimeSeriesChart({ data }: Props) {
             }}
             labelStyle={{ color: "#e2e8f0", marginBottom: 4 }}
             itemStyle={{ color: "#cbd5e1" }}
-            labelFormatter={(_label, payload) =>
-              payload?.[0]?.payload?.rangeLabel ?? _label
-            }
           />
           <Legend
             wrapperStyle={{ fontSize: 12, color: "#94a3b8", paddingTop: 12 }}
@@ -111,10 +110,30 @@ function formatDateLabel(iso: string): string {
   return `${day}/${month}`;
 }
 
-/** "05/01 – 19/01": the 15-day window starting at the bucket date. */
-function formatRangeLabel(iso: string): string {
-  const startMs = Date.parse(`${iso}T00:00:00Z`);
-  const endMs = startMs + 14 * 86_400_000;
-  const end = new Date(endMs).toISOString().slice(0, 10);
-  return `${formatDateLabel(iso)} – ${formatDateLabel(end)}`;
+const LABEL_EVERY_DAYS = 15;
+const DAY_MS = 86_400_000;
+
+/**
+ * Pick X-axis tick labels spaced ~15 calendar days apart. We walk the daily
+ * points and select the first one at/after each 15-day grid line, always
+ * including the last point so the most recent date is labeled.
+ */
+function pickTicks(points: { date: string; dateLabel: string }[]): string[] {
+  if (points.length === 0) return [];
+
+  const ticks: string[] = [];
+  let threshold = Date.parse(`${points[0].date}T00:00:00Z`);
+
+  for (const p of points) {
+    const ms = Date.parse(`${p.date}T00:00:00Z`);
+    if (ms >= threshold) {
+      ticks.push(p.dateLabel);
+      while (threshold <= ms) threshold += LABEL_EVERY_DAYS * DAY_MS;
+    }
+  }
+
+  const last = points[points.length - 1].dateLabel;
+  if (ticks[ticks.length - 1] !== last) ticks.push(last);
+
+  return ticks;
 }
