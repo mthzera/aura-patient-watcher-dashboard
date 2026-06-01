@@ -37,10 +37,12 @@ export function TimeSeriesChart({ data }: Props) {
     );
   }
 
-  // Format date labels for the X axis
+  // Format date labels for the X axis. Each point is a 15-day bucket starting
+  // at `date`; we also keep a range label (start–end) for the tooltip.
   const formatted = data.map((d) => ({
     ...d,
     dateLabel: formatDateLabel(d.date),
+    rangeLabel: formatRangeLabel(d.date),
   }));
 
   return (
@@ -76,6 +78,9 @@ export function TimeSeriesChart({ data }: Props) {
             }}
             labelStyle={{ color: "#e2e8f0", marginBottom: 4 }}
             itemStyle={{ color: "#cbd5e1" }}
+            labelFormatter={(_label, payload) =>
+              payload?.[0]?.payload?.rangeLabel ?? _label
+            }
           />
           <Legend
             wrapperStyle={{ fontSize: 12, color: "#94a3b8", paddingTop: 12 }}
@@ -101,4 +106,12 @@ export function TimeSeriesChart({ data }: Props) {
 function formatDateLabel(iso: string): string {
   const [, month, day] = iso.split("-");
   return `${day}/${month}`;
+}
+
+/** "05/01 – 19/01": the 15-day window starting at the bucket date. */
+function formatRangeLabel(iso: string): string {
+  const startMs = Date.parse(`${iso}T00:00:00Z`);
+  const endMs = startMs + 14 * 86_400_000;
+  const end = new Date(endMs).toISOString().slice(0, 10);
+  return `${formatDateLabel(iso)} – ${formatDateLabel(end)}`;
 }

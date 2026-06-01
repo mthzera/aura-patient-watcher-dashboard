@@ -343,21 +343,51 @@ export function calculateUnitSummaries(
 // Time-series aggregation
 // ---------------------------------------------------------------------------
 
+const MS_PER_DAY = 86_400_000;
+
+/** Days covered by each time-series bucket. */
+const BUCKET_DAYS = 15;
+
+/** Parse an ISO date (YYYY-MM-DD) to UTC milliseconds. */
+function isoToMs(iso: string): number {
+  return Date.parse(`${iso}T00:00:00Z`);
+}
+
+/**
+ * Build the evolution time series, aggregating records into fixed 15-day
+ * buckets anchored at the earliest date in the dataset. Each point holds the
+ * SUM of the four series over its 15-day window, so the line reads as a
+ * fortnightly evolution instead of a noisy day-by-day plot. The point's `date`
+ * is the window start (used as the X-axis label).
+ */
 export function buildTimeSeries(
   records: PatientRecord[]
 ): TimeSeriesPoint[] {
-  const byDate = new Map<string, PatientRecord[]>();
+  const dated = records
+    .map((r) => ({ date: parseDate(r.date), record: r }))
+    .filter((x): x is { date: string; record: PatientRecord } => !!x.date);
 
-  for (const r of records) {
-    const date = parseDate(r.date);
-    if (!date) continue;
-    if (!byDate.has(date)) byDate.set(date, []);
-    byDate.get(date)!.push(r);
+  if (dated.length === 0) return [];
+
+  const minMs = dated.reduce(
+    (min, x) => Math.min(min, isoToMs(x.date)),
+    Infinity
+  );
+
+  const byBucket = new Map<string, PatientRecord[]>();
+
+  for (const { date, record } of dated) {
+    const dayDiff = Math.floor((isoToMs(date) - minMs) / MS_PER_DAY);
+    const bucketIndex = Math.floor(dayDiff / BUCKET_DAYS);
+    const bucketStartMs = minMs + bucketIndex * BUCKET_DAYS * MS_PER_DAY;
+    const key = new Date(bucketStartMs).toISOString().slice(0, 10);
+    if (!byBucket.has(key)) byBucket.set(key, []);
+    byBucket.get(key)!.push(record);
   }
 
   const points: TimeSeriesPoint[] = [];
 
-  for (const [date, recs] of byDate) {
+  for (const [date, recs] of byBucket) {
     points.push({
       date,
       auraAlerts: recs.filter(isAuraAlerted).length,
