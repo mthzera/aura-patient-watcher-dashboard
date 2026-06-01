@@ -74,6 +74,11 @@ export const COLUMN_MAP: Record<string, string> = {
   resultado_clinico: "clinical_outcome",
   outcome: "clinical_outcome",
 
+  // NEWS2 scores
+  news2_ultimo: "news2_score",
+  news2: "news2_score",
+  score_news2: "news2_score",
+
   // Temporal / responsiveness fields (used by the Improvement Opportunity panel)
   turno_escala: "shift",
   turno: "shift",

@@ -8,6 +8,7 @@ import {
   calculateResponsiveness,
   calculateInitiationBreakdown,
   calculateDecompensation,
+  calculatePatientAlertRanking,
 } from "@/lib/dashboard/calculateMetrics";
 import { parseReinternacoes } from "@/lib/csv/parseReinternacoes";
 import { buildReinternacaoAlertAnalysis } from "@/lib/dashboard/buildReinternacaoAnalysis";
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
       responsiveness: calculateResponsiveness(filtered),
       initiationBreakdown: calculateInitiationBreakdown(filtered),
       decompensation: calculateDecompensation(filtered),
+      patientAlertRanking: calculatePatientAlertRanking(filtered),
       // Reinternações × Aura segue APENAS o filtro de data (pela Data Alta da
       // reinternação). Unidade/demais filtros não se aplicam aqui. A busca de
       // alertas nos 10 dias anteriores usa todos os registros (rows).

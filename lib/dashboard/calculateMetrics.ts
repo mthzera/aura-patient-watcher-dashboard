@@ -16,6 +16,9 @@ import {
   InitiationReason,
   DecompensationAnalysis,
   DecompCategory,
+  PatientAlertRanking,
+  RankedPatientAlerts,
+  TransientAlertBreakdown,
 } from "./types";
 import { parseDate } from "./applyFilters";
 import { getHour, getShift, SHIFT_ORDER } from "./shift";
@@ -538,6 +541,107 @@ export function calculateDecompensation(
     acuteMonitoringPatients,
     avoidedReadmissions: avoidedDays.size,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Patient alert rankings (by row count in the filtered set)
+// ---------------------------------------------------------------------------
+
+const RANKING_LIMIT = 20;
+
+function patientKey(r: PatientRecord): string | null {
+  const name = normalize(r.patient_name);
+  const mr = normalize(r.medical_record);
+  if (!name && !mr) return null;
+  return `${name}|${mr}`;
+}
+
+function emptyTransientBreakdown(): TransientAlertBreakdown {
+  return { basal: 0, comIntervencao: 0, estavel: 0, outros: 0 };
+}
+
+function parseNews2Score(record: PatientRecord): number | null {
+  const raw = record.news2_score ?? (record.news2_ultimo as string | undefined);
+  if (raw == null || raw === "") return null;
+  const n =
+    typeof raw === "number"
+      ? raw
+      : parseFloat(String(raw).trim().replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+function mergeNews2Peak(current: number | null, next: number | null): number | null {
+  if (next === null) return current;
+  if (current === null) return next;
+  return Math.max(current, next);
+}
+
+/**
+ * Top patients with the most transient or acute decompensation alerts.
+ * Transient entries include basal / com intervenção / estável / outros.
+ */
+export function calculatePatientAlertRanking(
+  records: PatientRecord[],
+  limit = RANKING_LIMIT
+): PatientAlertRanking {
+  const transientMap = new Map<
+    string,
+    RankedPatientAlerts & { breakdown: TransientAlertBreakdown }
+  >();
+  const acuteMap = new Map<string, RankedPatientAlerts & { news2Score: number | null }>();
+
+  for (const r of records) {
+    const key = patientKey(r);
+    if (!key) continue;
+
+    const patientName = (r.patient_name ?? "").trim() || "Sem nome";
+    const unit = r.unit?.trim() || null;
+
+    if (isTransientDecompensation(r)) {
+      let entry = transientMap.get(key);
+      if (!entry) {
+        entry = {
+          patientName,
+          unit,
+          total: 0,
+          news2Score: null,
+          breakdown: emptyTransientBreakdown(),
+        };
+        transientMap.set(key, entry);
+      }
+      entry.total += 1;
+      entry.news2Score = mergeNews2Peak(entry.news2Score, parseNews2Score(r));
+      const cat = transientCategory(r.clinical_outcome);
+      if (cat === "basal") entry.breakdown.basal += 1;
+      else if (cat === "comIntervencao") entry.breakdown.comIntervencao += 1;
+      else if (cat === "estavel") entry.breakdown.estavel += 1;
+      else entry.breakdown.outros += 1;
+    }
+
+    if (isAcuteDecompensation(r)) {
+      let entry = acuteMap.get(key);
+      if (!entry) {
+        entry = { patientName, unit, total: 0, news2Score: null };
+        acuteMap.set(key, entry);
+      }
+      entry.total += 1;
+      entry.news2Score = mergeNews2Peak(entry.news2Score, parseNews2Score(r));
+    }
+  }
+
+  const transient: RankedPatientAlerts[] = [...transientMap.values()]
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit)
+    .map(({ breakdown, ...rest }) => ({
+      ...rest,
+      transientBreakdown: breakdown,
+    }));
+
+  const acute: RankedPatientAlerts[] = [...acuteMap.values()]
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit);
+
+  return { limit, transient, acute };
 }
 
 // ---------------------------------------------------------------------------

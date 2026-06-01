@@ -6,6 +6,7 @@ import { FiltersBar, type ActiveFilters } from "@/components/FiltersBar";
 import { KpiCard } from "@/components/KpiCard";
 import { ClosedLoopPanel } from "@/components/ClosedLoopPanel";
 import { ClinicalIndicatorsPanel } from "@/components/ClinicalIndicatorsPanel";
+import { PatientAlertRankingPanel } from "@/components/PatientAlertRankingPanel";
 import { UnitManagementTable } from "@/components/UnitManagementTable";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { ImprovementOpportunityPanel } from "@/components/ImprovementOpportunityPanel";
@@ -291,6 +292,7 @@ export function DashboardClient() {
             />
             <InitiationReasonsPanel breakdown={data.initiationBreakdown} />
             <ClinicalIndicatorsPanel decompensation={data.decompensation} />
+            <PatientAlertRankingPanel ranking={data.patientAlertRanking} />
             <ReinternacaoAlertPanel
               analysis={data.reinternacaoAlertAnalysis}
             />

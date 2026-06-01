@@ -64,6 +64,8 @@ export interface PatientRecord {
   monitoring_status: string | null;
   /** "Ação Iniciação" — concrete action/reason text (used for no-return reasons) */
   initiation_action: string | null;
+  /** "NEWS2 (Último)" — National Early Warning Score 2 */
+  news2_score: string | null;
   [key: string]: unknown;
 }
 
@@ -304,6 +306,32 @@ export interface DecompensationAnalysis {
   avoidedReadmissions: number;
 }
 
+/** Per-patient split of transient alerts (row counts). */
+export interface TransientAlertBreakdown {
+  basal: number;
+  comIntervencao: number;
+  estavel: number;
+  outros: number;
+}
+
+/** One patient in an alert-frequency ranking. */
+export interface RankedPatientAlerts {
+  patientName: string;
+  unit: string | null;
+  /** Total alert rows for this patient in the ranking scope. */
+  total: number;
+  /** Highest NEWS2 (Último) among this patient's rows in the scope. */
+  news2Score: number | null;
+  transientBreakdown?: TransientAlertBreakdown;
+}
+
+/** Top patients by transient vs acute decompensation alert volume. */
+export interface PatientAlertRanking {
+  limit: number;
+  transient: RankedPatientAlerts[];
+  acute: RankedPatientAlerts[];
+}
+
 /** Response payload from /api/dashboard */
 export interface DashboardResponse {
   metrics: DashboardMetrics;
@@ -313,6 +341,7 @@ export interface DashboardResponse {
   reinternacaoAlertAnalysis: ReinternacaoAlertAnalysis;
   initiationBreakdown: InitiationActionBreakdown;
   decompensation: DecompensationAnalysis;
+  patientAlertRanking: PatientAlertRanking;
   totalRows: number;
   filteredRows: number;
   lastFetchAt: string | null;
