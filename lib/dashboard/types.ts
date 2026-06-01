@@ -78,19 +78,33 @@ export interface DashboardMetrics {
   /** Records where AURA alert was flagged ("Sim") */
   auraAlerts: number;
   /**
-   * Alerts that received any response from the unit (not "sem retorno" and not blank).
-   * Rule: sem retorno = sem triagem; each alert with a return = 1 triagem.
+   * AURA alerts that received any unit response (alias kept for compatibility).
+   * Same as alertsWithReturn.
    */
   triagens: number;
+  /** AURA alerts with a documented unit response (not "sem retorno") */
+  alertsWithReturn: number;
+  /** AURA alerts without unit response */
+  auraAlertsNoReturn: number;
+  /** alertResponseRate: alertsWithReturn / auraAlerts × 100 (one decimal) */
+  alertResponseRate: number;
+  /** auraAlertsNoReturn / auraAlerts × 100, rounded */
+  auraAlertsNoReturnRate: number;
+  /** noReturnCases / totalRecords × 100, rounded */
+  noReturnRecordsRate: number;
   /** Records with a documented unit response */
   unitActions: number;
   /** Records with a favorable clinical outcome */
   favorableOutcomes: number;
+  /** Records with any registered clinical outcome (non-empty desfecho) */
+  registeredOutcomes: number;
   /** AURA alerts with unit return where the clinical outcome was normal/basal/stable */
   normalClinicalReturnAlerts: number;
   /** Unique patients behind normalClinicalReturnAlerts */
   normalClinicalReturnPatients: number;
-  /** normalClinicalReturnAlerts / auraAlerts * 100, rounded */
+  /** normalClinicalReturnAlerts / alertsWithReturn × 100 (one decimal), 0 if none */
+  normalClinicalReturnAmongReturnRate: number;
+  /** normalClinicalReturnAlerts / auraAlerts × 100, rounded */
   normalClinicalReturnAlertRate: number;
   /**
    * Closed-loop effectiveness: among cases that had both a unit action
@@ -264,6 +278,40 @@ export interface InitiationActionBreakdown {
   semRetornoTotal: number;
 }
 
+/** Breakdown of no-return records by initiation reason (Ação Iniciação). */
+export interface NoReturnReasonsBreakdown {
+  available: boolean;
+  /** All records classified as sem retorno in the recorte */
+  totalNoReturn: number;
+  /** Records with a classified initiation reason (contato ou unidade) */
+  classified: number;
+  /** Records without a classified reason (sem classificação) */
+  notClassified: number;
+  semContatoTelefonico: number;
+  unidadeNaoRespondeu: number;
+  /** Sem classificação — sem motivo informado em Ação Iniciação */
+  naoInformado: number;
+}
+
+/**
+ * Three-way split of the filtered dataset: returns vs sem retorno.
+ * Sem retorno uses isNoReturn(); returns use Ação Iniciação subtypes.
+ */
+export interface RecordClassificationBreakdown {
+  available: boolean;
+  total: number;
+  retornoComIntervencao: number;
+  retornoBasal: number;
+  semRetorno: number;
+  /** Registros com retorno mas sem classificação reconhecida em Ação Iniciação */
+  unclassifiedReturns: number;
+  retornoComIntervencaoPercent: number;
+  retornoBasalPercent: number;
+  semRetornoPercent: number;
+  /** retornoComIntervencao + retornoBasal + semRetorno === total */
+  sumMatchesTotal: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Clinical decompensation analysis (counted by PATIENT-DAY, not by row)
 // ---------------------------------------------------------------------------
@@ -340,6 +388,8 @@ export interface DashboardResponse {
   responsiveness: ResponsivenessAnalysis;
   reinternacaoAlertAnalysis: ReinternacaoAlertAnalysis;
   initiationBreakdown: InitiationActionBreakdown;
+  noReturnReasons: NoReturnReasonsBreakdown;
+  recordClassification: RecordClassificationBreakdown;
   decompensation: DecompensationAnalysis;
   patientAlertRanking: PatientAlertRanking;
   totalRows: number;

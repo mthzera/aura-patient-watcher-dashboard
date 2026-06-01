@@ -108,7 +108,7 @@ function Leaderboard({
             {title}
           </h3>
           <span className="text-[10px] text-slate-500 tabular-nums">
-            {rows.length} jogadores
+            {rows.length} {rows.length === 1 ? "paciente" : "pacientes"}
           </span>
         </div>
         <p className="text-[10px] text-slate-600 mt-0.5">{subtitle}</p>

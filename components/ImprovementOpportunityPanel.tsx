@@ -21,10 +21,8 @@ interface Props {
 }
 
 export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) {
-  const noReturnPct =
-    metrics.totalRecords > 0
-      ? Math.round((metrics.noReturnCases / metrics.totalRecords) * 100)
-      : 0;
+  const noReturnRecordsPct = metrics.noReturnRecordsRate;
+  const noReturnAlertsPct = metrics.auraAlertsNoReturnRate;
 
   const r = responsiveness;
   const hasTemporal = r?.available ?? false;
@@ -40,25 +38,27 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed max-w-3xl">
             <strong className="text-amber-300">
-              {metrics.noReturnCases} casos
+              {metrics.noReturnCases} registros
             </strong>{" "}
-            ({noReturnPct}% do total) estão registrados como &quot;sem
-            retorno&quot;. A análise abaixo mostra <em>quando</em> o ciclo
+            ({noReturnRecordsPct}% dos registros) e{" "}
+            <strong className="text-amber-300">
+              {metrics.auraAlertsNoReturn} alertas AURA
+            </strong>{" "}
+            ({noReturnAlertsPct}% dos alertas) estão sem retorno. A análise
+            abaixo mostra <em>quando</em> o ciclo
             assistencial mais falha — por turno, dia da semana e horário — para
             direcionar o plano de ação.
           </p>
           {metrics.normalClinicalReturnAlerts > 0 && (
             <p className="mt-3 text-sm text-slate-300 leading-relaxed max-w-3xl">
-              Além disso,{" "}
+              Entre os alertas com retorno,{" "}
               <strong className="text-sky-300">
-                {metrics.normalClinicalReturnPatients} paciente
-                {metrics.normalClinicalReturnPatients !== 1 ? "s" : ""}
+                {metrics.normalClinicalReturnAlerts} alerta
+                {metrics.normalClinicalReturnAlerts !== 1 ? "s" : ""}
               </strong>{" "}
-              tiveram retorno da clínica indicando quadro normal, basal ou estável
-              após alerta AURA. Isso corresponde a{" "}
-              {metrics.normalClinicalReturnAlerts} alerta
-              {metrics.normalClinicalReturnAlerts !== 1 ? "s" : ""} (
-              {metrics.normalClinicalReturnAlertRate}% dos alertas AURA).
+              ({metrics.normalClinicalReturnAmongReturnRate}%) tiveram desfecho
+              normal, basal ou estável (
+              {metrics.normalClinicalReturnAlertRate}% de todos os alertas AURA).
             </p>
           )}
         </div>
@@ -73,12 +73,11 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
                 Ajuste de régua do alerta
               </h3>
               <p className="text-sm text-slate-300 leading-relaxed">
-                Como {metrics.normalClinicalReturnPatients} paciente
-                {metrics.normalClinicalReturnPatients !== 1 ? "s" : ""} estavam
-                normais/basais/estáveis após o alerta, a recomendação é revisar os
-                critérios de disparo e considerar subir a régua do AURA para reduzir
-                alertas de baixa prioridade sem perder sensibilidade para casos
-                agudos.
+                Como {metrics.normalClinicalReturnAlerts} alerta
+                {metrics.normalClinicalReturnAlerts !== 1 ? "s" : ""} com retorno
+                indicaram quadro normal/basal/estável, vale revisar os critérios de
+                disparo e considerar subir a régua do AURA para reduzir alertas de
+                baixa prioridade sem perder sensibilidade para casos agudos.
               </p>
             </div>
           </div>
@@ -153,10 +152,11 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
                 </span>
                 <span className="leading-relaxed">
                   Subir a régua dos critérios de alerta:{" "}
-                  {metrics.normalClinicalReturnPatients} paciente
-                  {metrics.normalClinicalReturnPatients !== 1 ? "s" : ""} tiveram
-                  retorno normal/basal/estável após o alerta (
-                  {metrics.normalClinicalReturnAlertRate}% dos alertas AURA).
+                  {metrics.normalClinicalReturnAlerts} alerta
+                  {metrics.normalClinicalReturnAlerts !== 1 ? "s" : ""} com
+                  retorno indicaram quadro normal/basal/estável (
+                  {metrics.normalClinicalReturnAmongReturnRate}% dos alertas com
+                  retorno).
                   Revise limiares e combinações de sinais para reduzir alertas de
                   baixa prioridade.
                 </span>

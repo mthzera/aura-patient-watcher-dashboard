@@ -1,54 +1,41 @@
 "use client";
 
-import type { InitiationActionBreakdown, InitiationReason } from "@/lib/dashboard/types";
-import { PhoneOff, Building2, Activity, HeartPulse, HelpCircle } from "lucide-react";
+import type { ReactNode } from "react";
+import type {
+  NoReturnReasonsBreakdown,
+  RecordClassificationBreakdown,
+} from "@/lib/dashboard/types";
+import {
+  Building2,
+  Activity,
+  HeartPulse,
+  HelpCircle,
+  AlertTriangle,
+} from "lucide-react";
 
 interface Props {
-  breakdown?: InitiationActionBreakdown;
+  noReturnReasons?: NoReturnReasonsBreakdown;
+  recordClassification?: RecordClassificationBreakdown;
 }
 
-const STYLE: Record<
-  InitiationReason["key"],
-  { color: string; bar: string; icon: React.ReactNode }
-> = {
-  retornoComIntervencao: {
-    color: "text-teal-300",
-    bar: "bg-teal-500",
-    icon: <Activity className="h-4 w-4" />,
-  },
-  retornoBasal: {
-    color: "text-sky-300",
-    bar: "bg-sky-500",
-    icon: <HeartPulse className="h-4 w-4" />,
-  },
-  semContatoTelefonico: {
-    color: "text-amber-300",
-    bar: "bg-amber-500",
-    icon: <PhoneOff className="h-4 w-4" />,
-  },
-  unidadeNaoRespondeu: {
-    color: "text-red-300",
-    bar: "bg-red-500",
-    icon: <Building2 className="h-4 w-4" />,
-  },
-  naoInformado: {
-    color: "text-slate-400",
-    bar: "bg-slate-600",
-    icon: <HelpCircle className="h-4 w-4" />,
-  },
-};
+function pctOf(part: number, total: number): number {
+  return total > 0 ? Math.round((part / total) * 100) : 0;
+}
 
-const NO_RETURN_KEYS: InitiationReason["key"][] = [
-  "semContatoTelefonico",
-  "unidadeNaoRespondeu",
-];
+export function InitiationReasonsPanel({
+  noReturnReasons,
+  recordClassification,
+}: Props) {
+  const hasNoReturn =
+    noReturnReasons?.available && noReturnReasons.totalNoReturn > 0;
+  const hasClassification =
+    recordClassification?.available && recordClassification.total > 0;
 
-export function InitiationReasonsPanel({ breakdown }: Props) {
-  if (!breakdown || !breakdown.available || breakdown.total === 0) {
+  if (!hasNoReturn && !hasClassification) {
     return (
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-6">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
-          Motivos da iniciativa
+          Classificação dos registros
         </h2>
         <p className="text-sm text-slate-500">
           Sem dados de &quot;Ação Iniciação&quot; para o recorte atual.
@@ -57,118 +44,213 @@ export function InitiationReasonsPanel({ breakdown }: Props) {
     );
   }
 
-  const { reasons, total, semRetornoTotal } = breakdown;
-  const max = Math.max(...reasons.map((r) => r.count), 1);
-  const noReturn = reasons.filter((r) => NO_RETURN_KEYS.includes(r.key));
-  const semRetornoPct =
-    total > 0 ? Math.round((semRetornoTotal / total) * 100) : 0;
+  return (
+    <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 space-y-6">
+      {hasNoReturn && (
+        <NoReturnDistribution breakdown={noReturnReasons!} />
+      )}
+      {hasClassification && (
+        <RecordClassificationSection breakdown={recordClassification!} />
+      )}
+    </section>
+  );
+}
+
+function NoReturnDistribution({ breakdown: nr }: { breakdown: NoReturnReasonsBreakdown }) {
+  const hierarchyValid =
+    nr.classified + nr.notClassified === nr.totalNoReturn &&
+    nr.unidadeNaoRespondeu + nr.semContatoTelefonico + nr.naoInformado ===
+      nr.totalNoReturn;
+
+  const unidadePct = pctOf(nr.unidadeNaoRespondeu, nr.totalNoReturn);
+  const contatoPct = pctOf(nr.semContatoTelefonico, nr.totalNoReturn);
+  const semClassPct = pctOf(nr.naoInformado, nr.totalNoReturn);
 
   return (
-    <section
-      id="motivos-nao-retorno"
-      className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 scroll-mt-4"
-    >
+    <div id="motivos-nao-retorno" className="scroll-mt-4">
       <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
-        Motivos da iniciativa
+        Distribuição dos casos sem retorno
       </h2>
       <p className="text-xs text-slate-500 mb-4 max-w-2xl">
-        Quebra de cada registro pela coluna &quot;Ação Iniciação&quot; — separa
-        retorno com intervenção e basal, e abre o sem retorno em seus motivos.
+        Por que os registros sem resposta da unidade não fecharam o ciclo — pela
+        coluna &quot;Ação Iniciação&quot;. Percentuais sobre o total sem retorno.
       </p>
 
-      {/* Destaque: motivos de não retorno */}
-      <div className="rounded-lg border-2 border-amber-700/80 bg-amber-950/50 p-4 sm:p-5 mb-5 shadow-[0_0_24px_-8px_rgba(251,191,36,0.25)]">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-widest text-amber-400 mb-1">
-              Além de não ter retorno, quais motivos de não retorno?
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
-              Dos registros no recorte,{" "}
-              <strong className="text-amber-300">{semRetornoTotal}</strong>{" "}
-              ({semRetornoPct}%) estão classificados como sem retorno — divididos
-              entre falha de contato telefônico e ausência de resposta da unidade.
-            </p>
+      {!hierarchyValid && (
+        <ValidationBanner message="A soma dos submotivos não confere com o total sem retorno. Revise a classificação na planilha." />
+      )}
+
+      <div className="rounded-lg border-2 border-amber-700/80 bg-amber-950/50 p-4 sm:p-5">
+        <div className="font-mono text-sm text-slate-300 space-y-1 leading-relaxed">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="text-lg font-bold text-amber-300 tabular-nums">
+              {nr.totalNoReturn}
+            </span>
+            <span className="font-sans text-xs font-semibold uppercase tracking-wider text-amber-400">
+              Total sem retorno
+            </span>
           </div>
-          <div className="shrink-0 text-right">
-            <div className="text-4xl font-bold text-amber-300 tabular-nums leading-none">
-              {semRetornoTotal}
-            </div>
-            <div className="text-xs text-amber-400/90 mt-1 tabular-nums">
-              {semRetornoPct}% do total
-            </div>
-          </div>
+
+          <TreeLine prefix="├─" indent={0}>
+            <span className="text-amber-200 font-semibold tabular-nums">
+              {nr.classified}
+            </span>{" "}
+            <span className="text-slate-400">classificados</span>
+          </TreeLine>
+
+          <TreeLine prefix="│  ├─" indent={1}>
+            <span className="text-red-300 tabular-nums">{nr.unidadeNaoRespondeu}</span>{" "}
+            Unidade não respondeu{" "}
+            <span className="text-slate-500">({unidadePct}%)</span>
+          </TreeLine>
+
+          <TreeLine prefix="│  └─" indent={1}>
+            <span className="text-amber-300 tabular-nums">{nr.semContatoTelefonico}</span>{" "}
+            Sem contato telefônico{" "}
+            <span className="text-slate-500">({contatoPct}%)</span>
+          </TreeLine>
+
+          <TreeLine prefix="└─" indent={0}>
+            <span className="text-slate-300 tabular-nums">{nr.notClassified}</span>{" "}
+            <span className="text-slate-200">Sem classificação</span>{" "}
+            <span className="text-slate-500">({semClassPct}%)</span>
+          </TreeLine>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-amber-800/50">
-          {noReturn.map((r) => {
-            const s = STYLE[r.key];
-            const shareOfNoReturn =
-              semRetornoTotal > 0
-                ? Math.round((r.count / semRetornoTotal) * 100)
-                : 0;
-            return (
-              <div
-                key={r.key}
-                className="rounded-lg border border-amber-800/60 bg-slate-900/50 p-3"
-              >
-                <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-amber-400/90">
-                  <span className={s.color}>{s.icon}</span>
-                  {r.label}
-                </div>
-                <div className="mt-2 flex items-end gap-2">
-                  <span className="text-2xl font-bold tabular-nums text-white">
-                    {r.count}
-                  </span>
-                  <span
-                    className={`pb-1 text-lg font-bold tabular-nums ${s.color}`}
-                  >
-                    {r.percent}%
-                  </span>
-                </div>
-                <div className="mt-1 text-xs text-slate-500">
-                  {shareOfNoReturn}% dos casos sem retorno · {r.count} de{" "}
-                  {total} registros
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <p className="mt-4 text-xs text-slate-500 border-t border-amber-800/50 pt-3">
+          <HelpCircle className="inline h-3.5 w-3.5 mr-1 -mt-0.5 text-slate-500" />
+          <strong className="text-slate-400">Sem classificação:</strong> registros
+          sem motivo de não retorno informado.
+        </p>
       </div>
+    </div>
+  );
+}
 
-      <p className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">
-        Visão completa — todos os motivos
+function RecordClassificationSection({
+  breakdown: rc,
+}: {
+  breakdown: RecordClassificationBreakdown;
+}) {
+  const sum =
+    rc.retornoComIntervencao + rc.retornoBasal + rc.semRetorno;
+  const displaySumMatches = rc.sumMatchesTotal && sum === rc.total;
+
+  const rows = [
+    {
+      key: "intervencao",
+      label: "Retorno com intervenção",
+      count: rc.retornoComIntervencao,
+      percent: rc.retornoComIntervencaoPercent,
+      dot: "bg-teal-500",
+      text: "text-teal-300",
+      icon: <Activity className="h-4 w-4" />,
+    },
+    {
+      key: "basal",
+      label: "Retorno basal",
+      count: rc.retornoBasal,
+      percent: rc.retornoBasalPercent,
+      dot: "bg-sky-500",
+      text: "text-sky-300",
+      icon: <HeartPulse className="h-4 w-4" />,
+    },
+    {
+      key: "semRetorno",
+      label: "Sem retorno",
+      count: rc.semRetorno,
+      percent: rc.semRetornoPercent,
+      dot: "bg-amber-500",
+      text: "text-amber-300",
+      icon: <Building2 className="h-4 w-4" />,
+    },
+  ];
+
+  return (
+    <div>
+      <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
+        Classificação dos registros
+      </h2>
+      <p className="text-xs text-slate-500 mb-4 max-w-2xl">
+        Como o recorte filtrado se divide entre retorno (com intervenção ou basal)
+        e sem retorno. Os três grupos devem somar o total de registros analisados.
       </p>
 
-      {/* Full breakdown bars */}
-      <div className="space-y-2">
-        {reasons.map((r) => {
-          const s = STYLE[r.key];
-          const isNoReturn = NO_RETURN_KEYS.includes(r.key);
-          return (
-            <div
-              key={r.key}
-              className={`flex items-center gap-3 rounded-md px-1 py-0.5 ${
-                isNoReturn ? "bg-amber-950/30 ring-1 ring-amber-900/40" : ""
-              }`}
-            >
-              <div className="flex w-48 shrink-0 items-center gap-2 text-xs text-slate-300">
-                <span className={s.color}>{s.icon}</span>
-                <span className="truncate">{r.label}</span>
+      {!displaySumMatches && (
+        <ValidationBanner
+          message={
+            rc.unclassifiedReturns > 0
+              ? `${rc.unclassifiedReturns} registro(s) com retorno não se encaixam em intervenção nem basal (Ação Iniciação). Soma parcial: ${sum} de ${rc.total}.`
+              : `Soma das categorias (${sum}) difere do total filtrado (${rc.total}).`
+          }
+        />
+      )}
+
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            className="rounded-lg border border-slate-700 bg-slate-950/50 px-4 py-3"
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${row.dot}`} />
+              <span className={`${row.text} flex items-center gap-1.5 text-sm font-medium`}>
+                {row.icon}
+                {row.label}
+              </span>
+            </div>
+            <div className="pl-5">
+              <div className="text-xl font-bold tabular-nums text-white">
+                {row.count}{" "}
+                <span className="text-sm font-normal text-slate-500">
+                  {row.count === 1 ? "registro" : "registros"}
+                </span>
               </div>
-              <div className="flex-1 h-5 rounded bg-slate-900/60 overflow-hidden">
-                <div
-                  className={`h-full ${s.bar} opacity-80`}
-                  style={{ width: `${(r.count / max) * 100}%` }}
-                />
-              </div>
-              <div className="w-24 shrink-0 text-right text-xs tabular-nums text-slate-400">
-                {r.count} ({r.percent}%)
+              <div className="text-xs text-slate-500 mt-0.5">
+                {row.percent}% dos registros analisados
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
-    </section>
+
+      <div className="mt-4 pt-3 border-t border-slate-700 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Total
+        </span>
+        <span className="text-sm font-bold tabular-nums text-slate-200">
+          {rc.total}{" "}
+          <span className="font-normal text-slate-500">
+            {rc.total === 1 ? "registro" : "registros"}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function TreeLine({
+  prefix,
+  indent,
+  children,
+}: {
+  prefix: string;
+  indent: number;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-1" style={{ paddingLeft: indent * 12 }}>
+      <span className="text-amber-700/80 shrink-0 select-none">{prefix}</span>
+      <span className="font-sans">{children}</span>
+    </div>
+  );
+}
+
+function ValidationBanner({ message }: { message: string }) {
+  return (
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-800/80 bg-amber-950/40 px-3 py-2">
+      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+      <p className="text-xs text-amber-200 leading-relaxed">{message}</p>
+    </div>
   );
 }

@@ -87,28 +87,40 @@ export function UploadPrompt({ onUploadSuccess, compact = false }: Props) {
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2">
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={onInputChange}
-        />
-        <button
-          onClick={() => inputRef.current?.click()}
-          disabled={state === "uploading"}
-          className="flex items-center gap-1.5 rounded-md border border-teal-700 bg-teal-900/40 px-4 py-1.5 text-xs font-medium text-teal-300 transition hover:bg-teal-800/60 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {state === "uploading" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Upload className="h-3.5 w-3.5" />
+      <div className="flex flex-col items-end gap-1 max-w-md">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={onInputChange}
+          />
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={state === "uploading"}
+            className="flex items-center gap-1.5 rounded-md border border-teal-700 bg-teal-900/40 px-4 py-1.5 text-xs font-medium text-teal-300 transition hover:bg-teal-800/60 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {state === "uploading" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Upload className="h-3.5 w-3.5" />
+            )}
+            {state === "uploading" ? "Enviando…" : "Upload CSV"}
+          </button>
+          {state === "success" && successInfo && (
+            <button
+              type="button"
+              onClick={retry}
+              className="text-xs text-teal-400 hover:text-teal-300 truncate max-w-[220px]"
+              title={successInfo.filename}
+            >
+              ✓ {successInfo.filename}
+            </button>
           )}
-          {state === "uploading" ? "Enviando…" : "Upload CSV"}
-        </button>
+        </div>
         {state === "error" && (
-          <span className="text-xs text-red-400">{errorMsg}</span>
+          <span className="text-xs text-red-400 text-right">{errorMsg}</span>
         )}
       </div>
     );

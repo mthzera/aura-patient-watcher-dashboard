@@ -7,6 +7,8 @@ import {
   buildTimeSeries,
   calculateResponsiveness,
   calculateInitiationBreakdown,
+  calculateNoReturnReasons,
+  calculateRecordClassification,
   calculateDecompensation,
   calculatePatientAlertRanking,
 } from "@/lib/dashboard/calculateMetrics";
@@ -39,6 +41,8 @@ export async function GET(request: NextRequest) {
       timeSeries: buildTimeSeries(filtered),
       responsiveness: calculateResponsiveness(filtered),
       initiationBreakdown: calculateInitiationBreakdown(filtered),
+      noReturnReasons: calculateNoReturnReasons(filtered),
+      recordClassification: calculateRecordClassification(filtered),
       decompensation: calculateDecompensation(filtered),
       patientAlertRanking: calculatePatientAlertRanking(filtered),
       // Reinternações × Aura segue APENAS o filtro de data (pela Data Alta da

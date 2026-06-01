@@ -10,7 +10,7 @@ interface Props {
   isLoading: boolean;
   isConnected: boolean;
   onRefresh: () => Promise<void>;
-  onUploadSuccess: () => void;
+  onUploadSuccess: (result: { filename: string; rowCount: number }) => void;
   onReinternacaoUpload?: (rowCount: number) => void;
   reinternacaoRowCount?: number | null;
   autoRefreshSeconds: number;

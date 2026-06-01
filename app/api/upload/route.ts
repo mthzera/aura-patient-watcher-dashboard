@@ -51,22 +51,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await saveFile(CSV_NAME, buffer, "text/csv");
+  try {
+    await saveFile(CSV_NAME, buffer, "text/csv");
+    await saveMetadata({
+      originalName: filename,
+      uploadedAt: new Date().toISOString(),
+      sizeBytes: buffer.byteLength,
+      rowCount,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { error: `Não foi possível salvar o arquivo: ${msg}` },
+      { status: 500 }
+    );
+  }
 
-  await saveMetadata({
-    originalName: filename,
-    uploadedAt: new Date().toISOString(),
-    sizeBytes: buffer.byteLength,
-    rowCount,
-  });
-
-  // Bust the data cache so the next dashboard request re-reads the file
   invalidateCache();
 
   return NextResponse.json({
     success: true,
     filename,
+    originalName: filename,
     sizeBytes: buffer.byteLength,
     rowCount,
+    uploadedAt: new Date().toISOString(),
   });
 }

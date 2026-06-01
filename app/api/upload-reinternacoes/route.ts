@@ -48,7 +48,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await saveFile(REINTERNACOES_NAME, buffer, "text/csv");
+  try {
+    await saveFile(REINTERNACOES_NAME, buffer, "text/csv");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { error: `Não foi possível salvar o arquivo: ${msg}` },
+      { status: 500 }
+    );
+  }
 
   await saveReinternacaoMetadata({
     originalName: filename,

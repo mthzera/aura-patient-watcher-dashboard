@@ -9,7 +9,7 @@
  * ./data so the normal dev workflow keeps working without extra setup.
  */
 
-import { put, list } from "@vercel/blob";
+import { del, list, put } from "@vercel/blob";
 import { mkdir, writeFile, readFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
@@ -17,9 +17,6 @@ import path from "path";
 const token = process.env.BLOB_READ_WRITE_TOKEN;
 const useBlob = Boolean(token);
 
-// On Vercel/Lambda the function filesystem is read-only. If we ever reach the
-// local-fs fallback there, a write fails with a cryptic EROFS. Detect it and
-// surface an actionable message instead.
 const isServerless = Boolean(
   process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
 );
@@ -42,6 +39,7 @@ export async function saveFile(
   }
 
   if (useBlob) {
+    await deleteBlobsByPathname(name);
     await put(name, body, {
       access: "public",
       addRandomSuffix: false,
@@ -78,7 +76,24 @@ export async function fileExists(name: string): Promise<boolean> {
   return existsSync(localPath(name));
 }
 
+/** Newest blob with an exact pathname (handles legacy duplicate uploads). */
 async function findBlob(name: string) {
   const { blobs } = await list({ prefix: name, limit: 1000, token });
-  return blobs.find((b) => b.pathname === name) ?? null;
+  const exact = blobs.filter((b) => b.pathname === name);
+  if (exact.length === 0) return null;
+  return exact.sort(
+    (a, b) =>
+      new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+  )[0];
+}
+
+/** Remove every blob version stored under this pathname before overwriting. */
+async function deleteBlobsByPathname(name: string) {
+  const { blobs } = await list({ prefix: name, limit: 1000, token });
+  const exact = blobs.filter((b) => b.pathname === name);
+  if (exact.length === 0) return;
+  await del(
+    exact.map((b) => b.url),
+    { token }
+  );
 }

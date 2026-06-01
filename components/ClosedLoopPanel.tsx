@@ -1,53 +1,65 @@
 "use client";
 
-import type {
-  DashboardMetrics,
-  InitiationActionBreakdown,
-} from "@/lib/dashboard/types";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import type { DashboardMetrics } from "@/lib/dashboard/types";
+import { METRIC_TOOLTIPS } from "@/lib/dashboard/metricTooltips";
+import { MetricTooltip } from "@/components/MetricTooltip";
+import { ArrowRight } from "lucide-react";
 
 interface Props {
   metrics: DashboardMetrics;
-  initiationBreakdown?: InitiationActionBreakdown;
 }
 
-export function ClosedLoopPanel({ metrics, initiationBreakdown }: Props) {
-  const noReturnRate = pct(metrics.noReturnCases, metrics.auraAlerts);
-
-  const noReturnReasons =
-    initiationBreakdown?.available && initiationBreakdown.semRetornoTotal > 0
-      ? initiationBreakdown.reasons.filter(
-          (r) =>
-            r.key === "semContatoTelefonico" || r.key === "unidadeNaoRespondeu"
-        )
-      : [];
-
-  const steps = [
+export function ClosedLoopPanel({ metrics }: Props) {
+  const funnelSteps = [
     {
-      label: "Alerta AURA",
+      label: "Registros",
+      value: metrics.totalRecords,
+      description: "Total no recorte",
+      tooltip: METRIC_TOOLTIPS.funnelRecords,
+      color: "border-slate-600 text-slate-300",
+      bg: "bg-slate-900/50",
+    },
+    {
+      label: "Alertas AURA",
       value: metrics.auraAlerts,
-      description: "Alertas registrados",
+      description: "Alertado: Sim",
+      tooltip: METRIC_TOOLTIPS.funnelAuraAlerts,
       color: "border-blue-600 text-blue-300",
       bg: "bg-blue-950/50",
     },
     {
-      label: "Triagem",
-      value: metrics.triagens,
-      description: "Alertas com retorno",
+      label: "Alertas com Retorno",
+      value: metrics.alertsWithReturn,
+      description: pctOf(metrics.alertsWithReturn, metrics.auraAlerts, "alertas"),
+      tooltip: METRIC_TOOLTIPS.funnelAlertsWithReturn,
       color: "border-violet-600 text-violet-300",
       bg: "bg-violet-950/50",
     },
     {
-      label: "Atuação da Unidade",
-      value: metrics.unitActions,
-      description: "Respostas documentadas",
+      label: "Alertas sem Retorno",
+      value: metrics.auraAlertsNoReturn,
+      description: pctOf(
+        metrics.auraAlertsNoReturn,
+        metrics.auraAlerts,
+        "alertas"
+      ),
+      tooltip: METRIC_TOOLTIPS.funnelAlertsNoReturn,
       color: "border-amber-600 text-amber-300",
       bg: "bg-amber-950/50",
     },
     {
-      label: "Desfecho Registrado",
-      value: metrics.favorableOutcomes,
-      description: "Desfechos favoráveis",
+      label: "Atuações da Unidade",
+      value: metrics.unitActions,
+      description: "Respostas documentadas",
+      tooltip: METRIC_TOOLTIPS.funnelUnitActions,
+      color: "border-orange-600 text-orange-300",
+      bg: "bg-orange-950/40",
+    },
+    {
+      label: "Desfechos Registrados",
+      value: metrics.registeredOutcomes,
+      description: "Desfecho clínico preenchido",
+      tooltip: METRIC_TOOLTIPS.funnelOutcomes,
       color: "border-teal-500 text-teal-300",
       bg: "bg-teal-950/50",
     },
@@ -59,103 +71,79 @@ export function ClosedLoopPanel({ metrics, initiationBreakdown }: Props) {
         Efetividade dos Alertas AURA
       </h2>
       <p className="text-xs text-slate-500 mb-4 max-w-2xl">
-        Fluxo rastreável do alerta até o desfecho, com indicadores resumidos de
-        retorno e ajuste de régua.
+        Funil do alerta ao desfecho. Cada etapa usa o denominador indicado —
+        registros ou alertas AURA — sem misturar bases.
       </p>
 
-      {/* Flow diagram */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        {steps.map((step, idx) => (
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        {funnelSteps.map((step, idx) => (
           <div key={step.label} className="flex items-center gap-2">
             <div
-              className={`rounded-lg border ${step.color} ${step.bg} px-4 py-3 min-w-[130px] text-center`}
+              className={`rounded-lg border ${step.color} ${step.bg} px-3 py-2.5 min-w-[118px] text-center`}
             >
-              <div className="text-xl font-bold tabular-nums">
-                {step.value}
+              <div className="text-xl font-bold tabular-nums">{step.value}</div>
+              <div className="text-[11px] font-semibold mt-1 inline-flex items-center justify-center gap-0.5">
+                {step.label}
+                <MetricTooltip text={step.tooltip} />
               </div>
-              <div className="text-xs font-semibold mt-1">{step.label}</div>
-              <div className="text-xs opacity-60 mt-0.5">{step.description}</div>
+              <div className="text-[10px] opacity-60 mt-0.5 leading-tight">
+                {step.description}
+              </div>
             </div>
-            {idx < steps.length - 1 && (
-              <ArrowRight className="h-5 w-5 shrink-0 text-slate-600" />
+            {idx < funnelSteps.length - 1 && (
+              <ArrowRight className="h-4 w-4 shrink-0 text-slate-600" />
             )}
           </div>
         ))}
       </div>
 
-      {/* Numeric conclusion */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-        <ConclusionStat
-          label="Sem retorno"
-          value={metrics.noReturnCases}
-          percent={noReturnRate}
-          detail="dos alertas AURA"
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <SummaryCard
+          label="Taxa de resposta aos alertas"
+          value={`${metrics.alertResponseRate}%`}
+          detail={`${metrics.alertsWithReturn} ÷ ${metrics.auraAlerts} alertas`}
+          tooltip={METRIC_TOOLTIPS.alertResponseRate}
+          tone="violet"
+        />
+        <SummaryCard
+          label="Sem retorno (registros)"
+          value={String(metrics.noReturnCases)}
+          detail={`${metrics.noReturnRecordsRate}% de ${metrics.totalRecords} registros`}
+          tooltip={METRIC_TOOLTIPS.noReturn}
           tone="warning"
         />
-        <ConclusionStat
+        <SummaryCard
+          label="Sem retorno (alertas AURA)"
+          value={String(metrics.auraAlertsNoReturn)}
+          detail={`${metrics.auraAlertsNoReturnRate}% de ${metrics.auraAlerts} alertas`}
+          tooltip={METRIC_TOOLTIPS.noReturn}
+          tone="warning"
+        />
+        <SummaryCard
           label="Retorno normal/basal/estável"
-          value={metrics.normalClinicalReturnPatients}
-          percent={metrics.normalClinicalReturnAlertRate}
-          detail={`${metrics.normalClinicalReturnAlerts} alertas AURA`}
+          value={String(metrics.normalClinicalReturnAlerts)}
+          detail={
+            metrics.alertsWithReturn > 0
+              ? `${metrics.normalClinicalReturnAmongReturnRate}% dos ${metrics.alertsWithReturn} alertas com retorno`
+              : "Nenhum alerta com retorno no recorte"
+          }
+          tooltip={METRIC_TOOLTIPS.normalReturn}
           tone="info"
         />
       </div>
 
-      {/* No-return reasons highlight */}
-      {noReturnReasons.length > 0 && (
-        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 mb-3 flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div className="flex-1">
-              <div className="text-xs font-semibold uppercase tracking-widest text-amber-400 mb-0.5">
-                Além de não ter retorno, quais motivos de não retorno?
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                <strong className="text-amber-300">
-                  {initiationBreakdown!.semRetornoTotal}
-                </strong>{" "}
-                registros sem retorno no recorte — decomposição pela coluna
-                &quot;Ação Iniciação&quot;:
-              </p>
-            </div>
-            <div className="text-3xl font-bold text-amber-300 tabular-nums shrink-0">
-              {initiationBreakdown!.semRetornoTotal}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {noReturnReasons.map((r) => (
-              <span
-                key={r.key}
-                className="rounded-md border border-amber-800/70 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-300"
-              >
-                <span className="font-semibold text-amber-200">{r.count}</span>{" "}
-                {r.label}{" "}
-                <span className="text-slate-500">({r.percent}%)</span>
-              </span>
-            ))}
-          </div>
-          <a
-            href="#motivos-nao-retorno"
-            className="inline-flex items-center gap-1 text-xs font-medium text-amber-400 hover:text-amber-300 transition"
-          >
-            Ver análise completa dos motivos
-            <ChevronDown className="h-3.5 w-3.5" />
-          </a>
-        </div>
-      )}
-
-      {/* Effectiveness highlight */}
       <div className="rounded-lg border border-teal-800 bg-teal-950/40 p-3 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
-          <div className="text-xs font-semibold uppercase tracking-widest text-teal-400 mb-0.5">
+          <div className="text-xs font-semibold uppercase tracking-widest text-teal-400 mb-0.5 inline-flex items-center gap-1">
             Efetividade do ciclo fechado
+            <MetricTooltip text={METRIC_TOOLTIPS.effectiveness} />
           </div>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Dentre os casos com atuação documentada e desfecho registrado,{" "}
+            Com atuação e desfecho registrados:{" "}
             <strong className="text-teal-300">
               {metrics.closedLoopEffectivenessRate}%
             </strong>{" "}
-            evoluíram com desfecho favorável (melhora clínica, condição basal ou
-            estabilização).
+            com desfecho favorável (melhora, basal ou estabilização).
           </p>
         </div>
         <div className="text-4xl font-bold text-teal-300 tabular-nums shrink-0">
@@ -166,44 +154,49 @@ export function ClosedLoopPanel({ metrics, initiationBreakdown }: Props) {
   );
 }
 
-function ConclusionStat({
+function SummaryCard({
   label,
   value,
-  percent,
   detail,
+  tooltip,
   tone,
 }: {
   label: string;
-  value: number;
-  percent: number | null;
+  value: string;
   detail: string;
-  tone: "default" | "warning" | "info";
+  tooltip: string;
+  tone: "violet" | "warning" | "info";
 }) {
   const toneClass =
     tone === "warning"
-      ? "border-amber-800/60 bg-amber-950/25 text-amber-300"
+      ? "border-amber-800/60 bg-amber-950/25"
       : tone === "info"
-      ? "border-sky-800/60 bg-sky-950/25 text-sky-300"
-      : "border-violet-800/60 bg-violet-950/25 text-violet-300";
+        ? "border-sky-800/60 bg-sky-950/25"
+        : "border-violet-800/60 bg-violet-950/25";
+
+  const valueClass =
+    tone === "warning"
+      ? "text-amber-300"
+      : tone === "info"
+        ? "text-sky-300"
+        : "text-violet-300";
 
   return (
     <div className={`rounded-lg border p-3 ${toneClass}`}>
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 inline-flex items-center gap-1">
         {label}
+        <MetricTooltip text={tooltip} />
       </div>
-      <div className="mt-2 flex items-end gap-2">
-        <span className="text-2xl font-bold tabular-nums text-white">
-          {value}
-        </span>
-        {percent !== null && (
-          <span className="pb-1 text-lg font-bold tabular-nums">{percent}%</span>
-        )}
+      <div className={`mt-2 text-2xl font-bold tabular-nums ${valueClass}`}>
+        {value}
       </div>
-      <div className="mt-1 text-xs text-slate-500">{detail}</div>
+      <div className="mt-1 text-xs text-slate-500 leading-snug">{detail}</div>
     </div>
   );
 }
 
-function pct(part: number, total: number): number {
-  return total > 0 ? Math.round((part / total) * 100) : 0;
+function pctOf(part: number, total: number, noun: string): string {
+  if (total <= 0) return `— dos ${noun}`;
+  const pct = Math.round((part / total) * 100);
+  return `${pct}% dos ${total} ${noun}`;
 }

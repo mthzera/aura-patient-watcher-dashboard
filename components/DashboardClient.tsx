@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, type ActiveFilters } from "@/components/FiltersBar";
 import { KpiCard } from "@/components/KpiCard";
+import { MetricTooltip } from "@/components/MetricTooltip";
 import { ClosedLoopPanel } from "@/components/ClosedLoopPanel";
+import { METRIC_TOOLTIPS } from "@/lib/dashboard/metricTooltips";
 import { ClinicalIndicatorsPanel } from "@/components/ClinicalIndicatorsPanel";
 import { PatientAlertRankingPanel } from "@/components/PatientAlertRankingPanel";
 import { UnitManagementTable } from "@/components/UnitManagementTable";
@@ -37,10 +39,17 @@ const EMPTY_METRICS: DashboardMetrics = {
   uniquePatients: 0,
   auraAlerts: 0,
   triagens: 0,
+  alertsWithReturn: 0,
+  auraAlertsNoReturn: 0,
+  alertResponseRate: 0,
+  auraAlertsNoReturnRate: 0,
+  noReturnRecordsRate: 0,
   unitActions: 0,
   favorableOutcomes: 0,
+  registeredOutcomes: 0,
   normalClinicalReturnAlerts: 0,
   normalClinicalReturnPatients: 0,
+  normalClinicalReturnAmongReturnRate: 0,
   normalClinicalReturnAlertRate: 0,
   closedLoopEffectivenessRate: 0,
   noReturnCases: 0,
@@ -153,15 +162,28 @@ export function DashboardClient() {
   }, [fetchDashboard, fetchFilters]);
 
   // Called after a successful CSV upload — reload everything
-  const handleUploadSuccess = useCallback(async () => {
-    setError(null);
-    setFilters(EMPTY_FILTERS);
-    await Promise.all([
-      fetchDashboard(EMPTY_FILTERS),
-      fetchFilters(),
-      fetchHealth(),
-    ]);
-  }, [fetchDashboard, fetchFilters, fetchHealth]);
+  const handleUploadSuccess = useCallback(
+    async (result: { filename: string; rowCount: number }) => {
+      setError(null);
+      setFilters(EMPTY_FILTERS);
+      setDataSource(
+        `CSV: ${result.filename} (${result.rowCount.toLocaleString("pt-BR")} linhas, enviado agora)`
+      );
+
+      try {
+        await fetch("/api/refresh", { method: "POST" });
+      } catch {
+        // refresh is best-effort; upload already invalidated server cache
+      }
+
+      await Promise.all([
+        fetchDashboard(EMPTY_FILTERS),
+        fetchFilters(),
+        fetchHealth(),
+      ]);
+    },
+    [fetchDashboard, fetchFilters, fetchHealth]
+  );
 
   useEffect(() => {
     fetchDashboard(EMPTY_FILTERS);
@@ -248,7 +270,7 @@ export function DashboardClient() {
         )}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
             label="Registros analisados"
             value={metrics.totalRecords}
@@ -256,41 +278,52 @@ export function DashboardClient() {
             icon={<Activity className="h-4 w-4" />}
           />
           <KpiCard
-            label="Pacientes únicos"
-            value={metrics.uniquePatients}
-            subtitle="Identificados na planilha"
-            icon={<Users className="h-4 w-4" />}
-          />
-          <KpiCard
             label="Alertas AURA"
             value={metrics.auraAlerts}
-            subtitle='Registros com "Alertado: Sim"'
+            subtitle='Coluna "Alertado AURA?" = Sim'
             icon={<Bell className="h-4 w-4" />}
           />
           <KpiCard
-            label="Atuação da unidade"
-            value={metrics.unitActions}
-            subtitle="Respostas documentadas"
+            label="Taxa de resposta aos alertas"
+            value={`${metrics.alertResponseRate}%`}
+            subtitle={`${metrics.alertsWithReturn} de ${metrics.auraAlerts} alertas`}
+            tooltip={<MetricTooltip text={METRIC_TOOLTIPS.alertResponseRate} />}
             icon={<CheckCircle className="h-4 w-4" />}
             variant="success"
+            highlight
           />
           <KpiCard
-            label="Casos sem retorno"
+            label="Sem retorno (registros)"
             value={metrics.noReturnCases}
-            subtitle="Ciclo assistencial não fechado"
+            subtitle={`${metrics.noReturnRecordsRate}% de ${metrics.totalRecords} registros`}
+            tooltip={<MetricTooltip text={METRIC_TOOLTIPS.noReturn} />}
             icon={<XCircle className="h-4 w-4" />}
             variant="warning"
+          />
+          <KpiCard
+            label="Sem retorno (alertas)"
+            value={metrics.auraAlertsNoReturn}
+            subtitle={`${metrics.auraAlertsNoReturnRate}% de ${metrics.auraAlerts} alertas`}
+            tooltip={<MetricTooltip text={METRIC_TOOLTIPS.noReturn} />}
+            icon={<XCircle className="h-4 w-4" />}
+            variant="warning"
+          />
+          <KpiCard
+            label="Pacientes únicos"
+            value={metrics.uniquePatients}
+            subtitle="No recorte filtrado"
+            icon={<Users className="h-4 w-4" />}
           />
         </div>
 
         {/* Main sections */}
         {data && (
           <>
-            <ClosedLoopPanel
-              metrics={metrics}
-              initiationBreakdown={data.initiationBreakdown}
+            <ClosedLoopPanel metrics={metrics} />
+            <InitiationReasonsPanel
+              noReturnReasons={data.noReturnReasons}
+              recordClassification={data.recordClassification}
             />
-            <InitiationReasonsPanel breakdown={data.initiationBreakdown} />
             <ClinicalIndicatorsPanel decompensation={data.decompensation} />
             <PatientAlertRankingPanel ranking={data.patientAlertRanking} />
             <ReinternacaoAlertPanel

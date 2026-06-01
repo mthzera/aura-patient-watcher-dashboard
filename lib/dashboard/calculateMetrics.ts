@@ -14,6 +14,8 @@ import {
   ResponsivenessAnalysis,
   InitiationActionBreakdown,
   InitiationReason,
+  NoReturnReasonsBreakdown,
+  RecordClassificationBreakdown,
   DecompensationAnalysis,
   DecompCategory,
   PatientAlertRanking,
@@ -150,6 +152,14 @@ function isFavorableOutcome(record: PatientRecord): boolean {
   return FAVORABLE_OUTCOMES.some((o) => outcome.includes(normalize(o)));
 }
 
+function hasRegisteredOutcome(record: PatientRecord): boolean {
+  return Boolean(normalize(record.clinical_outcome));
+}
+
+function rateOneDecimal(part: number, total: number): number {
+  return total > 0 ? Math.round((part / total) * 1000) / 10 : 0;
+}
+
 function isNormalClinicalReturn(record: PatientRecord): boolean {
   const outcome = normalize(record.clinical_outcome);
   const intervention = normalize(record.intervention_result as string | null | undefined);
@@ -238,16 +248,32 @@ function countUniquePatients(records: PatientRecord[]): number {
 export function calculateMetrics(records: PatientRecord[]): DashboardMetrics {
   const total = records.length;
 
-  const auraAlerts = records.filter(isAuraAlerted).length;
-  const triagens = records.filter(hasTriagem).length;
+  const auraAlertRecords = records.filter(isAuraAlerted);
+  const auraAlerts = auraAlertRecords.length;
+  const alertsWithReturn = auraAlertRecords.filter(hasTriagem).length;
+  const auraAlertsNoReturn = auraAlertRecords.filter(isNoReturn).length;
+  const triagens = alertsWithReturn;
   const unitActions = records.filter(hasUnitAction).length;
   const favorableOutcomes = records.filter(isFavorableOutcome).length;
+  const registeredOutcomes = records.filter(hasRegisteredOutcome).length;
   const noReturnCases = records.filter(isNoReturn).length;
+  const alertResponseRate = rateOneDecimal(alertsWithReturn, auraAlerts);
+  const auraAlertsNoReturnRate =
+    auraAlerts > 0
+      ? Math.round((auraAlertsNoReturn / auraAlerts) * 100)
+      : 0;
+  const noReturnRecordsRate =
+    total > 0 ? Math.round((noReturnCases / total) * 100) : 0;
+
   const normalClinicalReturnAlerts = records.filter(
     (r) => isAuraAlerted(r) && hasTriagem(r) && isNormalClinicalReturn(r)
   );
   const normalClinicalReturnAlertCount = normalClinicalReturnAlerts.length;
   const normalClinicalReturnPatients = countUniquePatients(normalClinicalReturnAlerts);
+  const normalClinicalReturnAmongReturnRate = rateOneDecimal(
+    normalClinicalReturnAlertCount,
+    alertsWithReturn
+  );
   const normalClinicalReturnAlertRate =
     auraAlerts > 0
       ? Math.round((normalClinicalReturnAlertCount / auraAlerts) * 100)
@@ -298,10 +324,17 @@ export function calculateMetrics(records: PatientRecord[]): DashboardMetrics {
     uniquePatients: countUniquePatients(records),
     auraAlerts,
     triagens,
+    alertsWithReturn,
+    auraAlertsNoReturn,
+    alertResponseRate,
+    auraAlertsNoReturnRate,
+    noReturnRecordsRate,
     unitActions,
     favorableOutcomes,
+    registeredOutcomes,
     normalClinicalReturnAlerts: normalClinicalReturnAlertCount,
     normalClinicalReturnPatients,
+    normalClinicalReturnAmongReturnRate,
     normalClinicalReturnAlertRate,
     closedLoopEffectivenessRate,
     noReturnCases,
@@ -359,7 +392,7 @@ const INITIATION_LABELS: Record<InitiationKey, string> = {
   unidadeNaoRespondeu: "Unidade não respondeu",
   retornoBasal: "Retorno basal",
   retornoComIntervencao: "Retorno com intervenção",
-  naoInformado: "Não informado",
+  naoInformado: "Sem classificação",
 };
 
 // Display order: positive returns first, then the no-return reasons, then N/A.
@@ -404,6 +437,92 @@ export function calculateInitiationBreakdown(
     total,
     reasons,
     semRetornoTotal: counts.semContatoTelefonico + counts.unidadeNaoRespondeu,
+  };
+}
+
+/**
+ * Motivos de não retorno — only records flagged as sem retorno, classified
+ * by "Ação Iniciação".
+ */
+export function calculateNoReturnReasons(
+  records: PatientRecord[]
+): NoReturnReasonsBreakdown {
+  const hasColumn = records.some(
+    (r) => r.initiation_action !== undefined && r.initiation_action !== null
+  );
+
+  const noReturnRecords = records.filter(isNoReturn);
+  let semContatoTelefonico = 0;
+  let unidadeNaoRespondeu = 0;
+  let naoInformado = 0;
+
+  for (const r of noReturnRecords) {
+    const key = classifyInitiation(r);
+    if (key === "semContatoTelefonico") semContatoTelefonico++;
+    else if (key === "unidadeNaoRespondeu") unidadeNaoRespondeu++;
+    else naoInformado++;
+  }
+
+  const classified = semContatoTelefonico + unidadeNaoRespondeu;
+  const totalNoReturn = noReturnRecords.length;
+
+  return {
+    available: hasColumn,
+    totalNoReturn,
+    classified,
+    notClassified: naoInformado,
+    semContatoTelefonico,
+    unidadeNaoRespondeu,
+    naoInformado,
+  };
+}
+
+/**
+ * Classificação dos registros do recorte em três grupos mutuamente
+ * exclusivos: retorno com intervenção, retorno basal e sem retorno.
+ */
+export function calculateRecordClassification(
+  records: PatientRecord[]
+): RecordClassificationBreakdown {
+  const hasColumn = records.some(
+    (r) => r.initiation_action !== undefined && r.initiation_action !== null
+  );
+
+  const total = records.length;
+  let retornoComIntervencao = 0;
+  let retornoBasal = 0;
+  let semRetorno = 0;
+  let unclassifiedReturns = 0;
+
+  for (const r of records) {
+    if (isNoReturn(r)) {
+      semRetorno++;
+      continue;
+    }
+    const key = classifyInitiation(r);
+    if (key === "retornoBasal") retornoBasal++;
+    else if (key === "retornoComIntervencao") retornoComIntervencao++;
+    else unclassifiedReturns++;
+  }
+
+  const classifiedSum = retornoComIntervencao + retornoBasal + semRetorno;
+  const sumMatchesTotal =
+    classifiedSum === total && unclassifiedReturns === 0;
+
+  return {
+    available: hasColumn,
+    total,
+    retornoComIntervencao,
+    retornoBasal,
+    semRetorno,
+    unclassifiedReturns,
+    retornoComIntervencaoPercent:
+      total > 0 ? Math.round((retornoComIntervencao / total) * 100) : 0,
+    retornoBasalPercent:
+      total > 0 ? Math.round((retornoBasal / total) * 100) : 0,
+    semRetornoPercent:
+      total > 0 ? Math.round((semRetorno / total) * 100) : 0,
+    sumMatchesTotal,
   };
 }
 
