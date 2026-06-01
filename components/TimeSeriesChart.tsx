@@ -21,7 +21,7 @@ const SERIES = [
   { key: "auraAlerts", label: "Alertas AURA", color: "#60a5fa" },
   { key: "unitActions", label: "Atuações da unidade", color: "#fbbf24" },
   { key: "favorableOutcomes", label: "Desfechos favoráveis", color: "#2dd4bf" },
-  { key: "noReturnCases", label: "Sem retorno", color: "#f87171" },
+  { key: "noReturnCases", label: "Alertas sem retorno", color: "#f87171" },
 ] as const;
 
 const REFERENCE_LINES = [

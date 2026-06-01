@@ -37,21 +37,27 @@ const REFRESH_SECONDS = parseInt(
 const EMPTY_METRICS: DashboardMetrics = {
   totalRecords: 0,
   uniquePatients: 0,
+  auraAlertFlagMissing: 0,
   auraAlerts: 0,
   triagens: 0,
   alertsWithReturn: 0,
   auraAlertsNoReturn: 0,
   alertResponseRate: 0,
   auraAlertsNoReturnRate: 0,
-  noReturnRecordsRate: 0,
   unitActions: 0,
   favorableOutcomes: 0,
   registeredOutcomes: 0,
+  registeredOutcomesAuraAlerts: 0,
+  registeredOutcomesAuraAlertsRate: 0,
+  registeredOutcomesAuraAlertsMissing: 0,
   normalClinicalReturnAlerts: 0,
   normalClinicalReturnPatients: 0,
   normalClinicalReturnAmongReturnRate: 0,
   normalClinicalReturnAlertRate: 0,
   closedLoopEffectivenessRate: 0,
+  closedLoopEffectivenessDenominator: 0,
+  closedLoopEffectivenessNumerator: 0,
+  closedLoopMissingOutcomeAmongActions: 0,
   noReturnCases: 0,
   transientDecompensations: 0,
   transientEffectiveActions: 0,
@@ -270,7 +276,7 @@ export function DashboardClient() {
         )}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <KpiCard
             label="Registros analisados"
             value={metrics.totalRecords}
@@ -293,17 +299,9 @@ export function DashboardClient() {
             highlight
           />
           <KpiCard
-            label="Sem retorno (registros)"
-            value={metrics.noReturnCases}
-            subtitle={`${metrics.noReturnRecordsRate}% de ${metrics.totalRecords} registros`}
-            tooltip={<MetricTooltip text={METRIC_TOOLTIPS.noReturn} />}
-            icon={<XCircle className="h-4 w-4" />}
-            variant="warning"
-          />
-          <KpiCard
-            label="Sem retorno (alertas)"
+            label="Alertas sem retorno"
             value={metrics.auraAlertsNoReturn}
-            subtitle={`${metrics.auraAlertsNoReturnRate}% de ${metrics.auraAlerts} alertas`}
+            subtitle={`${metrics.auraAlertsNoReturnRate}% dos ${metrics.auraAlerts} alertas AURA`}
             tooltip={<MetricTooltip text={METRIC_TOOLTIPS.noReturn} />}
             icon={<XCircle className="h-4 w-4" />}
             variant="warning"
@@ -322,7 +320,8 @@ export function DashboardClient() {
             <ClosedLoopPanel metrics={metrics} />
             <InitiationReasonsPanel
               noReturnReasons={data.noReturnReasons}
-              recordClassification={data.recordClassification}
+              returnReasons={data.returnReasons}
+              auraAlertSplit={data.auraAlertSplit}
             />
             <ClinicalIndicatorsPanel decompensation={data.decompensation} />
             <PatientAlertRankingPanel ranking={data.patientAlertRanking} />

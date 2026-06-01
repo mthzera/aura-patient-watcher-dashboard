@@ -113,8 +113,9 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
                 {analysis.withoutPriorAlert > 0 && (
                   <>
                     <strong className="text-amber-300">{analysis.withoutPriorAlert}</strong>{" "}
-                    tiveram alta sem alerta prévio registrado nos últimos 10 dias,
-                    representando uma oportunidade de melhoria na cobertura de monitoramento.
+                    tiveram alta sem alerta prévio registrado nos últimos 10 dias —
+                    justificativa: pacientes sem tablet disponível para registro de sinais vitais,
+                    o que impossibilitou a geração do alerta AURA.
                   </>
                 )}
               </>
@@ -122,7 +123,8 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
               <>
                 Nenhum dos {analysis.totalReinternacoes} pacientes com alta por
                 reinternação/óbito tinha alerta AURA registrado nos 10 dias
-                anteriores. Isso pode indicar lacuna na cobertura de monitoramento.
+                anteriores — justificativa: pacientes sem tablet disponível para
+                registro de sinais vitais, impossibilitando a geração do alerta AURA.
               </>
             )}
           </div>
@@ -244,10 +246,18 @@ function MatchRow({
             </span>
           )}
         </td>
-        <td className="px-3 py-2 text-slate-300 max-w-[240px]">
+        <td className="px-3 py-2 max-w-[240px]">
           {alertReasons ? (
-            <span className="line-clamp-2" title={alertReasons}>
+            <span className="text-slate-300 line-clamp-2" title={alertReasons}>
               {alertReasons}
+            </span>
+          ) : !match.hadPriorAlert ? (
+            <span
+              className="inline-flex items-center gap-1 text-slate-400 italic"
+              title="Paciente sem tablet disponível para registro de sinais vitais"
+            >
+              <span className="text-slate-500">📋</span>
+              Sem tablet para registro de sinais vitais
             </span>
           ) : (
             <span className="text-slate-600">—</span>

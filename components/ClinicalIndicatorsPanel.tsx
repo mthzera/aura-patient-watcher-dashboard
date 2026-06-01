@@ -1,6 +1,6 @@
 "use client";
 
-import { DecompensationAnalysis } from "@/lib/dashboard/types";
+import { AcutePatientDetail, DecompensationAnalysis } from "@/lib/dashboard/types";
 
 interface Props {
   decompensation?: DecompensationAnalysis;
@@ -11,7 +11,6 @@ export function ClinicalIndicatorsPanel({ decompensation }: Props) {
 
   const d = decompensation;
   const transientPct = pct(d.transientTotal, d.scopePatientDays);
-  const acutePct = pct(d.acuteTotal, d.scopePatientDays);
 
   // The 3 outcome buckets may not sum to the transient total — the remainder
   // are patient-days with other outcomes (erro de registro, finitude, etc.).
@@ -23,6 +22,8 @@ export function ClinicalIndicatorsPanel({ decompensation }: Props) {
     0,
     d.acuteTotal - d.deteriorationReversals - acuteMonitoring
   );
+  const acuteUnique = d.acuteUniquePatients ?? d.acuteTotal;
+  const acuteDetails: AcutePatientDetail[] = d.acutePatientDetails ?? [];
 
   // Patient-days with no decompensation event (routine/stable monitoring).
   // Fall back if an older API response lacks decompensatedPatientDays.
@@ -58,8 +59,8 @@ export function ClinicalIndicatorsPanel({ decompensation }: Props) {
           {pct(d.transientTotal, d.scopePatientDays)}%)
         </span>
         <span className="text-rose-300/90">
-          <strong>{d.acuteTotal}</strong> Aguda (
-          {pct(d.acuteTotal, d.scopePatientDays)}%)
+          <strong>{acuteUnique}</strong> Aguda (
+          {pct(acuteUnique, d.scopePatientDays)}%)
         </span>
         <span className="text-slate-500">= {d.scopePatientDays} no total</span>
       </div>
@@ -116,12 +117,12 @@ export function ClinicalIndicatorsPanel({ decompensation }: Props) {
               Descompensação Aguda
             </span>
             <span className="text-xs text-slate-400">
-              <strong className="text-slate-200">{d.acuteTotal}</strong> de{" "}
-              {d.scopePatientDays} pacientes-dia ({acutePct}%)
+              <strong className="text-slate-200">{acuteUnique}</strong> de{" "}
+              {d.scopePatientDays} pacientes ({pct(acuteUnique, d.scopePatientDays)}%)
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mb-3">
-            Desfecho dos {d.acuteTotal} pacientes-dia agudos:
+            Desfecho dos {acuteUnique} paciente{acuteUnique !== 1 ? "s" : ""} agudo{acuteUnique !== 1 ? "s" : ""}:
           </p>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -145,11 +146,42 @@ export function ClinicalIndicatorsPanel({ decompensation }: Props) {
               : ""}
             Reverteu + não reverteu
             {acuteMonitoring > 0
-              ? ` = ${d.deteriorationReversals + acuteNonReversal} de ${d.acuteTotal}`
-              : ` = ${d.acuteTotal}`}
+              ? ` = ${d.deteriorationReversals + acuteNonReversal} de ${acuteUnique}`
+              : ` = ${acuteUnique}`}
             . Dessas reversões, {d.avoidedReadmissions} tiveram atuação
             documentada da unidade.
           </p>
+
+          {acuteDetails.length > 0 && (
+            <div className="mt-3 border-t border-slate-700 pt-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Pacientes
+              </p>
+              <ul className="space-y-1.5">
+                {acuteDetails.map((p) => (
+                  <li key={p.patientName} className="flex items-start justify-between gap-2 text-xs">
+                    <span className="text-slate-200 font-medium leading-tight">{p.patientName}</span>
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${
+                        p.outcome === "reverteu"
+                          ? "bg-emerald-900/60 text-emerald-300"
+                          : p.outcome === "nao_reverteu"
+                          ? "bg-rose-900/60 text-rose-300"
+                          : "bg-slate-700/60 text-slate-400"
+                      }`}
+                    >
+                      {p.outcome === "reverteu"
+                        ? "Reverteu"
+                        : p.outcome === "nao_reverteu"
+                        ? "Não reverteu"
+                        : "Monitoramento"}
+                      {p.days > 1 ? ` · ${p.days}d` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 
@@ -171,8 +203,8 @@ export function ClinicalIndicatorsPanel({ decompensation }: Props) {
               {d.avoidedReadmissions}
             </div>
             <div className="text-sm font-bold text-emerald-400 tabular-nums">
-              {d.avoidedReadmissions} de {d.acuteTotal} agudos (
-              {pct(d.avoidedReadmissions, d.acuteTotal)}%)
+              {d.avoidedReadmissions} de {acuteUnique} agudos (
+              {pct(d.avoidedReadmissions, acuteUnique)}%)
             </div>
           </div>
         </div>

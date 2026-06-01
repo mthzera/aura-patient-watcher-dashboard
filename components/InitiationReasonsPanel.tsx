@@ -2,229 +2,312 @@
 
 import type { ReactNode } from "react";
 import type {
+  AuraAlertSplitBreakdown,
+  DesfechoBreakdown,
   NoReturnReasonsBreakdown,
-  RecordClassificationBreakdown,
+  ReturnReasonsBreakdown,
 } from "@/lib/dashboard/types";
-import {
-  Building2,
-  Activity,
-  HeartPulse,
-  HelpCircle,
-  AlertTriangle,
-} from "lucide-react";
+import { HelpCircle, AlertTriangle } from "lucide-react";
 
 interface Props {
   noReturnReasons?: NoReturnReasonsBreakdown;
-  recordClassification?: RecordClassificationBreakdown;
+  returnReasons?: ReturnReasonsBreakdown;
+  auraAlertSplit?: AuraAlertSplitBreakdown;
 }
 
-function pctOf(part: number, total: number): number {
-  return total > 0 ? Math.round((part / total) * 100) : 0;
+function pctOf(part: number | undefined | null, total: number): number {
+  if (!total || part == null || !Number.isFinite(part)) return 0;
+  return Math.round((part / total) * 100);
 }
 
 export function InitiationReasonsPanel({
   noReturnReasons,
-  recordClassification,
+  returnReasons,
+  auraAlertSplit,
 }: Props) {
-  const hasNoReturn =
-    noReturnReasons?.available && noReturnReasons.totalNoReturn > 0;
-  const hasClassification =
-    recordClassification?.available && recordClassification.total > 0;
+  const hasSplit = Boolean(
+    auraAlertSplit?.available && auraAlertSplit.totalAuraAlerts > 0
+  );
+  const hasNoReturn = Boolean(
+    noReturnReasons?.available && noReturnReasons.totalNoReturn > 0
+  );
+  const hasReturn = Boolean(
+    returnReasons?.available && returnReasons.totalWithReturn > 0
+  );
 
-  if (!hasNoReturn && !hasClassification) {
+  if (!hasSplit && !hasNoReturn && !hasReturn) {
     return (
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-6">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
-          Classificação dos registros
+          Classificação dos alertas AURA
         </h2>
         <p className="text-sm text-slate-500">
-          Sem dados de &quot;Ação Iniciação&quot; para o recorte atual.
+          Sem alertas AURA ou sem coluna &quot;Ação Iniciação&quot; no recorte.
         </p>
       </section>
     );
   }
 
   return (
-    <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 space-y-6">
-      {hasNoReturn && (
-        <NoReturnDistribution breakdown={noReturnReasons!} />
+    <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 space-y-5">
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
+          Classificação dos alertas AURA
+        </h2>
+        <p className="text-xs text-slate-500 max-w-2xl">
+          Cada alerta AURA teve retorno da unidade ou não — os dois grupos somam o
+          total de alertas. Abaixo, o funil de cada grupo pela coluna &quot;Ação
+          Iniciação&quot; (e desfecho clínico nos retornos).
+        </p>
+      </div>
+
+      {hasSplit && (
+        <AuraSplitOverview split={auraAlertSplit!} hasNoReturn={hasNoReturn} hasReturn={hasReturn} />
       )}
-      {hasClassification && (
-        <RecordClassificationSection breakdown={recordClassification!} />
-      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {hasReturn && (
+          <ReturnDistribution breakdown={returnReasons!} />
+        )}
+        {hasNoReturn && (
+          <NoReturnDistribution breakdown={noReturnReasons!} />
+        )}
+      </div>
     </section>
   );
 }
 
-function NoReturnDistribution({ breakdown: nr }: { breakdown: NoReturnReasonsBreakdown }) {
-  const hierarchyValid =
-    nr.classified + nr.notClassified === nr.totalNoReturn &&
-    nr.unidadeNaoRespondeu + nr.semContatoTelefonico + nr.naoInformado ===
-      nr.totalNoReturn;
-
-  const unidadePct = pctOf(nr.unidadeNaoRespondeu, nr.totalNoReturn);
-  const contatoPct = pctOf(nr.semContatoTelefonico, nr.totalNoReturn);
-  const semClassPct = pctOf(nr.naoInformado, nr.totalNoReturn);
+function AuraSplitOverview({
+  split,
+  hasNoReturn,
+  hasReturn,
+}: {
+  split: AuraAlertSplitBreakdown;
+  hasNoReturn: boolean;
+  hasReturn: boolean;
+}) {
+  const withReturnPct = pctOf(split.alertsWithReturn, split.totalAuraAlerts);
+  const noReturnPct = pctOf(split.auraAlertsNoReturn, split.totalAuraAlerts);
 
   return (
-    <div id="motivos-nao-retorno" className="scroll-mt-4">
-      <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
-        Distribuição dos casos sem retorno
-      </h2>
-      <p className="text-xs text-slate-500 mb-4 max-w-2xl">
-        Por que os registros sem resposta da unidade não fecharam o ciclo — pela
-        coluna &quot;Ação Iniciação&quot;. Percentuais sobre o total sem retorno.
-      </p>
-
-      {!hierarchyValid && (
-        <ValidationBanner message="A soma dos submotivos não confere com o total sem retorno. Revise a classificação na planilha." />
+    <div className="rounded-lg border border-blue-800/60 bg-blue-950/30 px-4 py-3">
+      {!split.sumMatchesTotal && (
+        <ValidationBanner message="Com retorno + sem retorno não fecha o total de alertas AURA. Revise os dados." />
       )}
-
-      <div className="rounded-lg border-2 border-amber-700/80 bg-amber-950/50 p-4 sm:p-5">
-        <div className="font-mono text-sm text-slate-300 space-y-1 leading-relaxed">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span className="text-lg font-bold text-amber-300 tabular-nums">
-              {nr.totalNoReturn}
-            </span>
-            <span className="font-sans text-xs font-semibold uppercase tracking-wider text-amber-400">
-              Total sem retorno
-            </span>
-          </div>
-
-          <TreeLine prefix="├─" indent={0}>
-            <span className="text-amber-200 font-semibold tabular-nums">
-              {nr.classified}
-            </span>{" "}
-            <span className="text-slate-400">classificados</span>
-          </TreeLine>
-
-          <TreeLine prefix="│  ├─" indent={1}>
-            <span className="text-red-300 tabular-nums">{nr.unidadeNaoRespondeu}</span>{" "}
-            Unidade não respondeu{" "}
-            <span className="text-slate-500">({unidadePct}%)</span>
-          </TreeLine>
-
-          <TreeLine prefix="│  └─" indent={1}>
-            <span className="text-amber-300 tabular-nums">{nr.semContatoTelefonico}</span>{" "}
-            Sem contato telefônico{" "}
-            <span className="text-slate-500">({contatoPct}%)</span>
-          </TreeLine>
-
-          <TreeLine prefix="└─" indent={0}>
-            <span className="text-slate-300 tabular-nums">{nr.notClassified}</span>{" "}
-            <span className="text-slate-200">Sem classificação</span>{" "}
-            <span className="text-slate-500">({semClassPct}%)</span>
-          </TreeLine>
+      <div className="font-mono text-sm text-slate-300 space-y-1">
+        <div className="flex flex-wrap items-baseline gap-2 mb-2">
+          <span className="text-lg font-bold text-blue-300 tabular-nums">
+            {split.totalAuraAlerts}
+          </span>
+          <span className="font-sans text-xs font-semibold uppercase tracking-wider text-blue-400">
+            Alertas AURA no recorte
+          </span>
         </div>
-
-        <p className="mt-4 text-xs text-slate-500 border-t border-amber-800/50 pt-3">
-          <HelpCircle className="inline h-3.5 w-3.5 mr-1 -mt-0.5 text-slate-500" />
-          <strong className="text-slate-400">Sem classificação:</strong> registros
-          sem motivo de não retorno informado.
-        </p>
+        <TreeLine prefix="├─" indent={0}>
+          <span className="text-violet-300 tabular-nums font-semibold">
+            {split.alertsWithReturn}
+          </span>{" "}
+          com retorno <span className="text-slate-500">({withReturnPct}%)</span>
+          {hasReturn && (
+            <span className="text-slate-600 font-sans text-[10px] ml-1">
+              → detalhe à esquerda
+            </span>
+          )}
+        </TreeLine>
+        <TreeLine prefix="└─" indent={0}>
+          <span className="text-amber-300 tabular-nums font-semibold">
+            {split.auraAlertsNoReturn}
+          </span>{" "}
+          sem retorno <span className="text-slate-500">({noReturnPct}%)</span>
+          {hasNoReturn && (
+            <span className="text-slate-600 font-sans text-[10px] ml-1">
+              → detalhe à direita
+            </span>
+          )}
+        </TreeLine>
       </div>
     </div>
   );
 }
 
-function RecordClassificationSection({
-  breakdown: rc,
+function DesfechoGroup({
+  label,
+  color,
+  data,
+  total,
+  categories,
 }: {
-  breakdown: RecordClassificationBreakdown;
+  label: string;
+  color: string;
+  data: DesfechoBreakdown;
+  total: number;
+  categories: { key: keyof Omit<DesfechoBreakdown, "total">; label: string }[];
 }) {
-  const sum =
-    rc.retornoComIntervencao + rc.retornoBasal + rc.semRetorno;
-  const displaySumMatches = rc.sumMatchesTotal && sum === rc.total;
+  if (data.total === 0) return null;
+  return (
+    <>
+      <TreeLine prefix="├─" indent={0}>
+        <span className={`font-semibold tabular-nums ${color}`}>{data.total}</span>{" "}
+        <span className="text-slate-300">{label}</span>{" "}
+        <span className="text-slate-500">({pctOf(data.total, total)}%)</span>
+      </TreeLine>
+      {categories.map(({ key, label: catLabel }, i) => {
+        const val = data[key] ?? 0;
+        if (val === 0) return null;
+        const isLast = i === categories.length - 1 || categories.slice(i + 1).every(c => (data[c.key] ?? 0) === 0);
+        return (
+          <TreeLine key={key} prefix={isLast ? "│  └─" : "│  ├─"} indent={1}>
+            <span className="tabular-nums text-slate-200">{val}</span>{" "}
+            <span className="text-slate-400">{catLabel}</span>{" "}
+            <span className="text-slate-600">({pctOf(val, data.total)}%)</span>
+          </TreeLine>
+        );
+      })}
+    </>
+  );
+}
 
-  const rows = [
-    {
-      key: "intervencao",
-      label: "Retorno com intervenção",
-      count: rc.retornoComIntervencao,
-      percent: rc.retornoComIntervencaoPercent,
-      dot: "bg-teal-500",
-      text: "text-teal-300",
-      icon: <Activity className="h-4 w-4" />,
-    },
-    {
-      key: "basal",
-      label: "Retorno basal",
-      count: rc.retornoBasal,
-      percent: rc.retornoBasalPercent,
-      dot: "bg-sky-500",
-      text: "text-sky-300",
-      icon: <HeartPulse className="h-4 w-4" />,
-    },
-    {
-      key: "semRetorno",
-      label: "Sem retorno",
-      count: rc.semRetorno,
-      percent: rc.semRetornoPercent,
-      dot: "bg-amber-500",
-      text: "text-amber-300",
-      icon: <Building2 className="h-4 w-4" />,
-    },
+const EMPTY_DESFECHO: DesfechoBreakdown = {
+  total: 0, melhoraClinica: 0, condicaoBasal: 0, finitude: 0,
+  reintercacao: 0, erroRegistro: 0, semRetorno: 0, semInformacao: 0,
+};
+
+function ReturnDistribution({
+  breakdown: rr,
+}: {
+  breakdown: ReturnReasonsBreakdown;
+}) {
+  const AGUDA_CATS: { key: keyof Omit<DesfechoBreakdown, "total">; label: string }[] = [
+    { key: "melhoraClinica", label: "Melhora clínica" },
+    { key: "finitude",       label: "Finitude" },
+    { key: "reintercacao",   label: "Reinternação" },
+    { key: "erroRegistro",   label: "Erro de registro" },
+    { key: "semInformacao",  label: "Sem informação" },
   ];
 
+  const ESPERADA_CATS: { key: keyof Omit<DesfechoBreakdown, "total">; label: string }[] = [
+    { key: "melhoraClinica", label: "Melhora clínica / Estabilização" },
+    { key: "condicaoBasal",  label: "Condição basal" },
+    { key: "semRetorno",     label: "Sem retorno" },
+    { key: "erroRegistro",   label: "Erro de registro" },
+    { key: "finitude",       label: "Finitude" },
+    { key: "semInformacao",  label: "Sem informação" },
+  ];
+
+  const t = rr.totalWithReturn;
+  const aguda = rr.aguda ?? EMPTY_DESFECHO;
+  const esperada = rr.esperada ?? EMPTY_DESFECHO;
+  const outros = rr.outros ?? 0;
+  const sumCheck = aguda.total + esperada.total + outros;
+
   return (
-    <div>
-      <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-300 mb-1">
-        Classificação dos registros
-      </h2>
-      <p className="text-xs text-slate-500 mb-4 max-w-2xl">
-        Como o recorte filtrado se divide entre retorno (com intervenção ou basal)
-        e sem retorno. Os três grupos devem somar o total de registros analisados.
+    <div className="rounded-lg border-2 border-violet-700/80 bg-violet-950/40 p-4 sm:p-5 h-full">
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-violet-300 mb-1">
+        Alertas com retorno
+      </h3>
+      <p className="text-[10px] text-slate-500 mb-3">
+        Intervenção Unidade = Sim ou Reavaliação · {t} alertas.
       </p>
 
-      {!displaySumMatches && (
-        <ValidationBanner
-          message={
-            rc.unclassifiedReturns > 0
-              ? `${rc.unclassifiedReturns} registro(s) com retorno não se encaixam em intervenção nem basal (Ação Iniciação). Soma parcial: ${sum} de ${rc.total}.`
-              : `Soma das categorias (${sum}) difere do total filtrado (${rc.total}).`
-          }
-        />
-      )}
-
-      <div className="space-y-3">
-        {rows.map((row) => (
-          <div
-            key={row.key}
-            className="rounded-lg border border-slate-700 bg-slate-950/50 px-4 py-3"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${row.dot}`} />
-              <span className={`${row.text} flex items-center gap-1.5 text-sm font-medium`}>
-                {row.icon}
-                {row.label}
-              </span>
-            </div>
-            <div className="pl-5">
-              <div className="text-xl font-bold tabular-nums text-white">
-                {row.count}{" "}
-                <span className="text-sm font-normal text-slate-500">
-                  {row.count === 1 ? "registro" : "registros"}
-                </span>
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">
-                {row.percent}% dos registros analisados
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 pt-3 border-t border-slate-700 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Total
-        </span>
-        <span className="text-sm font-bold tabular-nums text-slate-200">
-          {rc.total}{" "}
-          <span className="font-normal text-slate-500">
-            {rc.total === 1 ? "registro" : "registros"}
+      <div className="font-mono text-sm text-slate-300 space-y-1 leading-relaxed">
+        <div className="flex flex-wrap items-baseline gap-2 mb-1">
+          <span className="text-lg font-bold text-violet-300 tabular-nums">{t}</span>
+          <span className="font-sans text-xs font-semibold uppercase tracking-wider text-violet-400">
+            Total com retorno
           </span>
-        </span>
+        </div>
+
+        <DesfechoGroup
+          label="Descompensação Aguda"
+          color="text-rose-300"
+          data={aguda}
+          total={t}
+          categories={AGUDA_CATS}
+        />
+
+        <DesfechoGroup
+          label="Transitória Esperada"
+          color="text-amber-300"
+          data={esperada}
+          total={t}
+          categories={ESPERADA_CATS}
+        />
+
+        {outros > 0 && (
+          <TreeLine prefix="└─" indent={0}>
+            <span className="tabular-nums text-slate-400 font-semibold">{outros}</span>{" "}
+            <span className="text-slate-400">Outros / sem alteração clínica</span>{" "}
+            <span className="text-slate-500">({pctOf(outros, t)}%)</span>
+          </TreeLine>
+        )}
       </div>
+
+      <p className="mt-3 text-[10px] text-slate-500 border-t border-violet-800/50 pt-2">
+        Desfecho Clínico por tipo de Alteração Clínica ·{" "}
+        {sumCheck === t
+          ? `${aguda.total} + ${esperada.total} + ${outros} = ${t} ✓`
+          : "verifique os dados"}
+      </p>
+    </div>
+  );
+}
+
+function NoReturnDistribution({
+  breakdown: nr,
+}: {
+  breakdown: NoReturnReasonsBreakdown;
+}) {
+  const semInfoCount = nr.semInformacao ?? 0;
+  const unidadePct = pctOf(nr.unidadeNaoRespondeu, nr.totalNoReturn);
+  const contatoPct = pctOf(nr.semContatoTelefonico, nr.totalNoReturn);
+  const semInfoPct = pctOf(semInfoCount, nr.totalNoReturn);
+
+  return (
+    <div
+      id="motivos-nao-retorno"
+      className="rounded-lg border-2 border-amber-700/80 bg-amber-950/50 p-4 sm:p-5 h-full scroll-mt-4"
+    >
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-amber-400 mb-1">
+        Alertas sem retorno
+      </h3>
+      <p className="text-[10px] text-slate-500 mb-3">
+        Percentuais sobre o total sem retorno ({nr.totalNoReturn} alertas).
+      </p>
+
+      <div className="font-mono text-sm text-slate-300 space-y-1 leading-relaxed">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-lg font-bold text-amber-300 tabular-nums">
+            {nr.totalNoReturn}
+          </span>
+          <span className="font-sans text-xs font-semibold uppercase tracking-wider text-amber-400">
+            Total sem retorno
+          </span>
+        </div>
+
+        <TreeLine prefix="├─" indent={0}>
+          <span className="text-red-300 tabular-nums font-semibold">{nr.unidadeNaoRespondeu}</span>{" "}
+          Sem retorno da unidade{" "}
+          <span className="text-slate-500">({unidadePct}%)</span>
+        </TreeLine>
+
+        <TreeLine prefix="├─" indent={0}>
+          <span className="text-amber-300 tabular-nums font-semibold">{nr.semContatoTelefonico}</span>{" "}
+          Sem retorno contato telefônico{" "}
+          <span className="text-slate-500">({contatoPct}%)</span>
+        </TreeLine>
+
+        <TreeLine prefix="└─" indent={0}>
+          <span className="text-slate-400 tabular-nums font-semibold">{semInfoCount}</span>{" "}
+          <span className="text-slate-300">Sem informação</span>{" "}
+          <span className="text-slate-500">({semInfoPct}%)</span>
+        </TreeLine>
+      </div>
+
+      <p className="mt-3 text-[10px] text-slate-500 border-t border-amber-800/50 pt-2">
+        <HelpCircle className="inline h-3 w-3 mr-0.5 -mt-0.5" />
+        <strong className="text-slate-400">Sem informação:</strong> campo &quot;Ação
+        Iniciação&quot; em branco, erro de registro ou outro valor não reconhecido.
+      </p>
     </div>
   );
 }
@@ -240,7 +323,7 @@ function TreeLine({
 }) {
   return (
     <div className="flex gap-1" style={{ paddingLeft: indent * 12 }}>
-      <span className="text-amber-700/80 shrink-0 select-none">{prefix}</span>
+      <span className="text-slate-600 shrink-0 select-none">{prefix}</span>
       <span className="font-sans">{children}</span>
     </div>
   );
@@ -248,9 +331,9 @@ function TreeLine({
 
 function ValidationBanner({ message }: { message: string }) {
   return (
-    <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-800/80 bg-amber-950/40 px-3 py-2">
-      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
-      <p className="text-xs text-amber-200 leading-relaxed">{message}</p>
+    <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-800/80 bg-amber-950/40 px-2.5 py-2">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400 mt-0.5" />
+      <p className="text-[10px] text-amber-200 leading-relaxed">{message}</p>
     </div>
   );
 }

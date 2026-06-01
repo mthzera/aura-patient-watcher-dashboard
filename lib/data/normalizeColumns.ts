@@ -98,6 +98,10 @@ export const COLUMN_MAP: Record<string, string> = {
   resultado_intervencao: "intervention_result",
   resultado_da_intervencao_unidade: "intervention_result",
 
+  // Unit intervention flag (Intervenção Unidade) — "Sim" | "Reavaliação" | "Sem Retorno" | …
+  intervencao_unidade: "intervention_unit",
+  intervencao_da_unidade: "intervention_unit",
+
   // Initiation action (Ação Iniciação) — concrete reason/action text
   acao_iniciacao: "initiation_action",
   acao_iniciativa: "initiation_action",

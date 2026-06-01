@@ -15,9 +15,12 @@ import {
   InitiationActionBreakdown,
   InitiationReason,
   NoReturnReasonsBreakdown,
-  RecordClassificationBreakdown,
+  ReturnReasonsBreakdown,
+  DesfechoBreakdown,
+  AuraAlertSplitBreakdown,
   DecompensationAnalysis,
   DecompCategory,
+  AcutePatientDetail,
   PatientAlertRanking,
   RankedPatientAlerts,
   TransientAlertBreakdown,
@@ -89,13 +92,24 @@ const MONITORING_OUTCOME_PHRASES = ["em monitoramento", "monitorando"];
  * Adjust this list to match actual values in your spreadsheet.
  */
 /**
- * Whether this alert was triaged — i.e. the unit gave ANY response.
- * Rule: sem retorno = sem triagem; any non-empty non-"sem retorno" response = 1 triagem.
+ * Whether this alert had a unit intervention — primary source of truth is
+ * the "Intervenção Unidade" column ("Sim" or "Reavaliação").
+ *
+ * Falls back to the old signals when the column is absent (legacy data):
+ *   - clinical_outcome is non-empty, or
+ *   - aura_action_status is non-empty and not a "sem retorno" phrase.
  */
 export function hasTriagem(record: PatientRecord): boolean {
-  // No clinical alteration = sem triagem
-  if (!normalize(record.clinical_alteration)) return false;
+  const unit = normalize(record.intervention_unit as string | null | undefined);
 
+  // Primary signal: Intervenção Unidade column present
+  if (unit) {
+    return unit === "sim" || unit === "reavaliacao";
+  }
+
+  // Fallback for records without the column
+  if (!normalize(record.clinical_alteration)) return false;
+  if (normalize(record.clinical_outcome)) return true;
   const status = normalize(record.aura_action_status);
   if (!status) return false;
   if (NO_RETURN_PHRASES.some((p) => status.includes(p))) return false;
@@ -182,6 +196,18 @@ function isAuraAlerted(record: PatientRecord): boolean {
   return val === "sim" || val === "yes" || val === "1" || val === "true";
 }
 
+function isAuraAlertFlagMissing(record: PatientRecord): boolean {
+  return !normalize(record.aura_alerted);
+}
+
+/**
+ * Alerta AURA sem retorno da unidade — complemento de hasTriagem entre alertas.
+ * Garante: com retorno + sem retorno = total de alertas AURA.
+ */
+export function isAuraAlertNoReturn(record: PatientRecord): boolean {
+  return isAuraAlerted(record) && !hasTriagem(record);
+}
+
 function isTransientDecompensation(record: PatientRecord): boolean {
   const alt = normalize(record.clinical_alteration);
   return TRANSIENT_PHRASES.some((p) => alt.includes(normalize(p)));
@@ -248,22 +274,31 @@ function countUniquePatients(records: PatientRecord[]): number {
 export function calculateMetrics(records: PatientRecord[]): DashboardMetrics {
   const total = records.length;
 
+  const auraAlertFlagMissing = records.filter(isAuraAlertFlagMissing).length;
   const auraAlertRecords = records.filter(isAuraAlerted);
   const auraAlerts = auraAlertRecords.length;
   const alertsWithReturn = auraAlertRecords.filter(hasTriagem).length;
-  const auraAlertsNoReturn = auraAlertRecords.filter(isNoReturn).length;
+  const auraAlertsNoReturn = auraAlertRecords.filter(isAuraAlertNoReturn).length;
   const triagens = alertsWithReturn;
   const unitActions = records.filter(hasUnitAction).length;
   const favorableOutcomes = records.filter(isFavorableOutcome).length;
   const registeredOutcomes = records.filter(hasRegisteredOutcome).length;
-  const noReturnCases = records.filter(isNoReturn).length;
+  const registeredOutcomesAuraAlerts = auraAlertRecords.filter(
+    hasRegisteredOutcome
+  ).length;
+  const registeredOutcomesAuraAlertsMissing = Math.max(
+    0,
+    auraAlerts - registeredOutcomesAuraAlerts
+  );
+  const registeredOutcomesAuraAlertsRate =
+    auraAlerts > 0
+      ? Math.round((registeredOutcomesAuraAlerts / auraAlerts) * 100)
+      : 0;
   const alertResponseRate = rateOneDecimal(alertsWithReturn, auraAlerts);
   const auraAlertsNoReturnRate =
     auraAlerts > 0
       ? Math.round((auraAlertsNoReturn / auraAlerts) * 100)
       : 0;
-  const noReturnRecordsRate =
-    total > 0 ? Math.round((noReturnCases / total) * 100) : 0;
 
   const normalClinicalReturnAlerts = records.filter(
     (r) => isAuraAlerted(r) && hasTriagem(r) && isNormalClinicalReturn(r)
@@ -283,13 +318,20 @@ export function calculateMetrics(records: PatientRecord[]): DashboardMetrics {
   // Among cases with a unit action AND a registered clinical outcome,
   // what % ended with a favorable outcome?
   const withActionAndOutcome = records.filter(
-    (r) => hasUnitAction(r) && r.clinical_outcome
+    (r) => hasUnitAction(r) && hasRegisteredOutcome(r)
   );
   const withActionAndFavorable = withActionAndOutcome.filter(isFavorableOutcome);
+  const closedLoopEffectivenessDenominator = withActionAndOutcome.length;
+  const closedLoopEffectivenessNumerator = withActionAndFavorable.length;
+  const closedLoopMissingOutcomeAmongActions = Math.max(
+    0,
+    unitActions - closedLoopEffectivenessDenominator
+  );
   const closedLoopEffectivenessRate =
-    withActionAndOutcome.length > 0
+    closedLoopEffectivenessDenominator > 0
       ? Math.round(
-          (withActionAndFavorable.length / withActionAndOutcome.length) * 100
+          (closedLoopEffectivenessNumerator / closedLoopEffectivenessDenominator) *
+            100
         )
       : 0;
 
@@ -322,22 +364,28 @@ export function calculateMetrics(records: PatientRecord[]): DashboardMetrics {
   return {
     totalRecords: total,
     uniquePatients: countUniquePatients(records),
+    auraAlertFlagMissing,
     auraAlerts,
     triagens,
     alertsWithReturn,
     auraAlertsNoReturn,
     alertResponseRate,
     auraAlertsNoReturnRate,
-    noReturnRecordsRate,
     unitActions,
     favorableOutcomes,
     registeredOutcomes,
+    registeredOutcomesAuraAlerts,
+    registeredOutcomesAuraAlertsRate,
+    registeredOutcomesAuraAlertsMissing,
     normalClinicalReturnAlerts: normalClinicalReturnAlertCount,
     normalClinicalReturnPatients,
     normalClinicalReturnAmongReturnRate,
     normalClinicalReturnAlertRate,
     closedLoopEffectivenessRate,
-    noReturnCases,
+    closedLoopEffectivenessDenominator,
+    closedLoopEffectivenessNumerator,
+    closedLoopMissingOutcomeAmongActions,
+    noReturnCases: auraAlertsNoReturn,
     transientDecompensations,
     transientEffectiveActions,
     transientEffectiveRate,
@@ -441,8 +489,12 @@ export function calculateInitiationBreakdown(
 }
 
 /**
- * Motivos de não retorno — only records flagged as sem retorno, classified
- * by "Ação Iniciação".
+ * Distribuição de alertas AURA sem retorno, classificados por "Ação Iniciação".
+ *
+ * Three flat buckets — determined solely by the "Ação Iniciação" text:
+ *   1. unidadeNaoRespondeu  — "sem retorno da unidade"
+ *   2. semContatoTelefonico — "sem retorno contato telefônico"
+ *   3. semInformacao        — everything else (blank, erro, outros)
  */
 export function calculateNoReturnReasons(
   records: PatientRecord[]
@@ -451,78 +503,125 @@ export function calculateNoReturnReasons(
     (r) => r.initiation_action !== undefined && r.initiation_action !== null
   );
 
-  const noReturnRecords = records.filter(isNoReturn);
+  const noReturnRecords = records.filter(isAuraAlertNoReturn);
   let semContatoTelefonico = 0;
   let unidadeNaoRespondeu = 0;
-  let naoInformado = 0;
+  let semInformacao = 0;
 
   for (const r of noReturnRecords) {
     const key = classifyInitiation(r);
     if (key === "semContatoTelefonico") semContatoTelefonico++;
     else if (key === "unidadeNaoRespondeu") unidadeNaoRespondeu++;
-    else naoInformado++;
+    else semInformacao++;
   }
-
-  const classified = semContatoTelefonico + unidadeNaoRespondeu;
-  const totalNoReturn = noReturnRecords.length;
 
   return {
     available: hasColumn,
-    totalNoReturn,
-    classified,
-    notClassified: naoInformado,
-    semContatoTelefonico,
+    totalNoReturn: noReturnRecords.length,
     unidadeNaoRespondeu,
-    naoInformado,
+    semContatoTelefonico,
+    semInformacao,
+  };
+}
+
+/** Classify "Desfecho Clínico" for a Descompensação Aguda record. */
+function classifyDesfechoAguda(
+  outcome: string | null | undefined
+): keyof Omit<DesfechoBreakdown, "total"> {
+  const o = normalize(outcome);
+  if (!o) return "semInformacao";
+  if (o.includes("melhora")) return "melhoraClinica";
+  if (o.includes("finitude")) return "finitude";
+  if (o.includes("reinterc") || o.includes("reinternac")) return "reintercacao";
+  if (o.includes("erro")) return "erroRegistro";
+  return "semInformacao";
+}
+
+/** Classify "Desfecho Clínico" for a Descompensação Transitória Esperada record. */
+function classifyDesfechoEsperada(
+  outcome: string | null | undefined
+): keyof Omit<DesfechoBreakdown, "total"> {
+  const o = normalize(outcome);
+  if (!o) return "semInformacao";
+  if (o.includes("melhora") || o.includes("estabiliz")) return "melhoraClinica";
+  if (o.includes("condicao basal") || o.includes("basal")) return "condicaoBasal";
+  if (o.includes("sem retorno")) return "semRetorno";
+  if (o.includes("erro")) return "erroRegistro";
+  if (o.includes("finitude")) return "finitude";
+  return "semInformacao";
+}
+
+function emptyDesfecho(): DesfechoBreakdown {
+  return {
+    total: 0,
+    melhoraClinica: 0,
+    condicaoBasal: 0,
+    finitude: 0,
+    reintercacao: 0,
+    erroRegistro: 0,
+    semRetorno: 0,
+    semInformacao: 0,
   };
 }
 
 /**
- * Classificação dos registros do recorte em três grupos mutuamente
- * exclusivos: retorno com intervenção, retorno basal e sem retorno.
+ * Distribuição de alertas AURA com retorno, classificados por Alteração Clínica
+ * e Desfecho Clínico.
+ *
+ * "Com retorno" = Intervenção Unidade = "Sim" | "Reavaliação".
  */
-export function calculateRecordClassification(
+export function calculateReturnReasons(
   records: PatientRecord[]
-): RecordClassificationBreakdown {
+): ReturnReasonsBreakdown {
   const hasColumn = records.some(
-    (r) => r.initiation_action !== undefined && r.initiation_action !== null
+    (r) => r.intervention_unit !== undefined && r.intervention_unit !== null
   );
 
-  const total = records.length;
-  let retornoComIntervencao = 0;
-  let retornoBasal = 0;
-  let semRetorno = 0;
-  let unclassifiedReturns = 0;
+  const withReturn = records.filter(
+    (r) => isAuraAlerted(r) && hasTriagem(r)
+  );
 
-  for (const r of records) {
-    if (isNoReturn(r)) {
-      semRetorno++;
-      continue;
+  const aguda = emptyDesfecho();
+  const esperada = emptyDesfecho();
+  let outros = 0;
+
+  for (const r of withReturn) {
+    const alt = normalize(r.clinical_alteration);
+    if (alt.includes("aguda")) {
+      aguda.total++;
+      aguda[classifyDesfechoAguda(r.clinical_outcome)]++;
+    } else if (alt.includes("transitoria") || alt.includes("esperada")) {
+      esperada.total++;
+      esperada[classifyDesfechoEsperada(r.clinical_outcome)]++;
+    } else {
+      outros++;
     }
-    const key = classifyInitiation(r);
-    if (key === "retornoBasal") retornoBasal++;
-    else if (key === "retornoComIntervencao") retornoComIntervencao++;
-    else unclassifiedReturns++;
   }
-
-  const classifiedSum = retornoComIntervencao + retornoBasal + semRetorno;
-  const sumMatchesTotal =
-    classifiedSum === total && unclassifiedReturns === 0;
 
   return {
     available: hasColumn,
-    total,
-    retornoComIntervencao,
-    retornoBasal,
-    semRetorno,
-    unclassifiedReturns,
-    retornoComIntervencaoPercent:
-      total > 0 ? Math.round((retornoComIntervencao / total) * 100) : 0,
-    retornoBasalPercent:
-      total > 0 ? Math.round((retornoBasal / total) * 100) : 0,
-    semRetornoPercent:
-      total > 0 ? Math.round((semRetorno / total) * 100) : 0,
-    sumMatchesTotal,
+    totalWithReturn: withReturn.length,
+    aguda,
+    esperada,
+    outros,
+  };
+}
+
+/** Alertas AURA = com retorno + sem retorno (deve fechar). */
+export function calculateAuraAlertSplit(
+  records: PatientRecord[]
+): AuraAlertSplitBreakdown {
+  const aura = records.filter(isAuraAlerted);
+  const totalAuraAlerts = aura.length;
+  const alertsWithReturn = aura.filter(hasTriagem).length;
+  const auraAlertsNoReturn = aura.filter(isAuraAlertNoReturn).length;
+
+  return {
+    available: totalAuraAlerts > 0,
+    totalAuraAlerts,
+    alertsWithReturn,
+    auraAlertsNoReturn,
+    sumMatchesTotal: alertsWithReturn + auraAlertsNoReturn === totalAuraAlerts,
   };
 }
 
@@ -624,6 +723,13 @@ export function calculateDecompensation(
   const monitoringDays = new Set<string>();
   const avoidedDays = new Set<string>();
 
+  // Per-patient tracking for unique patient count and detail list.
+  // outcome priority: nao_reverteu > reverteu > monitoramento
+  const acutePatientMap = new Map<
+    string,
+    { name: string; unit: string | null; days: Set<string>; outcome: AcutePatientDetail["outcome"] }
+  >();
+
   for (const r of acuteRecs) {
     const k = patientDayKey(r);
     if (!k) continue;
@@ -632,10 +738,42 @@ export function calculateDecompensation(
     if (isDeteriorationReversal(r)) reversalDays.add(k);
     else if (isMonitoringOutcome(r)) monitoringDays.add(k);
     if (hasUnitAction(r) && isFavorableOutcome(r)) avoidedDays.add(k);
+
+    // Unique-patient accumulation
+    const pKey = normalize(r.patient_name) || k;
+    let entry = acutePatientMap.get(pKey);
+    if (!entry) {
+      entry = {
+        name: r.patient_name?.trim() || pKey,
+        unit: r.unit?.trim() || null,
+        days: new Set(),
+        outcome: "monitoramento",
+      };
+      acutePatientMap.set(pKey, entry);
+    }
+    entry.days.add(k);
+
+    // Worst-case outcome: nao_reverteu > reverteu > monitoramento
+    if (isDeteriorationReversal(r)) {
+      if (entry.outcome === "monitoramento") entry.outcome = "reverteu";
+    } else if (!isMonitoringOutcome(r)) {
+      entry.outcome = "nao_reverteu";
+    }
   }
 
   const acuteTotal = acuteDays.size;
   const acuteMonitoringPatients = monitoringDays.size;
+
+  const acutePatientDetails: AcutePatientDetail[] = Array.from(
+    acutePatientMap.values()
+  )
+    .sort((a, b) => {
+      const priority = { nao_reverteu: 0, reverteu: 1, monitoramento: 2 };
+      const diff = priority[a.outcome] - priority[b.outcome];
+      if (diff !== 0) return diff;
+      return a.name.localeCompare(b.name, "pt-BR");
+    })
+    .map((e) => ({ patientName: e.name, unit: e.unit, days: e.days.size, outcome: e.outcome }));
 
   // Patient-days with ANY decompensation (union; a day can be both).
   const decompensatedPatientDays = new Set([...transientDays, ...acuteDays]).size;
@@ -651,6 +789,7 @@ export function calculateDecompensation(
         ? Math.round((transientEffectiveDays.size / transientTotal) * 100)
         : 0,
     acuteTotal,
+    acuteUniquePatients: acutePatientMap.size,
     acuteEffectivePatients: acuteEffectiveDays.size,
     acuteEffectiveRate:
       acuteTotal > 0
@@ -659,6 +798,7 @@ export function calculateDecompensation(
     deteriorationReversals: reversalDays.size,
     acuteMonitoringPatients,
     avoidedReadmissions: avoidedDays.size,
+    acutePatientDetails,
   };
 }
 
@@ -783,7 +923,7 @@ export function calculateUnitSummaries(
   for (const [unit, recs] of groups) {
     const unitActions = recs.filter(hasUnitAction).length;
     const favorableOutcomes = recs.filter(isFavorableOutcome).length;
-    const noReturnCases = recs.filter(isNoReturn).length;
+    const noReturnCases = recs.filter(isAuraAlertNoReturn).length;
 
     const withActionAndOutcome = recs.filter(
       (r) => hasUnitAction(r) && r.clinical_outcome
@@ -864,7 +1004,7 @@ export function buildTimeSeries(records: PatientRecord[]): TimeSeriesPoint[] {
       auraAlerts: round1(recs.filter(isAuraAlerted).length / days),
       unitActions: round1(recs.filter(hasUnitAction).length / days),
       favorableOutcomes: round1(recs.filter(isFavorableOutcome).length / days),
-      noReturnCases: round1(recs.filter(isNoReturn).length / days),
+      noReturnCases: round1(recs.filter(isAuraAlertNoReturn).length / days),
     });
   }
 
@@ -912,13 +1052,15 @@ function getDayOfWeek(record: PatientRecord): number | null {
 /** Build a bucket from a set of records. */
 function makeBucket(label: string, recs: PatientRecord[]): TemporalBucket {
   const total = recs.length;
-  const noReturn = recs.filter(isNoReturn).length;
+  const auraRecs = recs.filter(isAuraAlerted);
+  const auraTotal = auraRecs.length;
+  const noReturn = auraRecs.filter(isAuraAlertNoReturn).length;
   const effective = recs.filter(isEffectiveResponse).length;
   return {
     label,
     total,
     noReturn,
-    noReturnRate: pct(noReturn, total),
+    noReturnRate: pct(noReturn, auraTotal),
     effective,
     effectiveRate: pct(effective, total),
   };
@@ -1005,9 +1147,10 @@ export function calculateResponsiveness(
     "max"
   );
 
+  const auraRecs = records.filter(isAuraAlerted);
   const overallNoReturnRate = pct(
-    records.filter(isNoReturn).length,
-    total
+    auraRecs.filter(isAuraAlertNoReturn).length,
+    auraRecs.length
   );
 
   const actionPlan = buildActionPlan({

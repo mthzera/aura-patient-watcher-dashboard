@@ -64,6 +64,8 @@ export interface PatientRecord {
   monitoring_status: string | null;
   /** "Ação Iniciação" — concrete action/reason text (used for no-return reasons) */
   initiation_action: string | null;
+  /** "Intervenção Unidade" — "Sim" | "Reavaliação" | "Sem Retorno" | "Não" | … */
+  intervention_unit: string | null;
   /** "NEWS2 (Último)" — National Early Warning Score 2 */
   news2_score: string | null;
   [key: string]: unknown;
@@ -75,6 +77,8 @@ export interface DashboardMetrics {
   totalRecords: number;
   /** Distinct patients (by patient_name + medical_record) */
   uniquePatients: number;
+  /** Records where "Alertado AURA?" is blank / N/A (unknown) */
+  auraAlertFlagMissing: number;
   /** Records where AURA alert was flagged ("Sim") */
   auraAlerts: number;
   /**
@@ -90,14 +94,18 @@ export interface DashboardMetrics {
   alertResponseRate: number;
   /** auraAlertsNoReturn / auraAlerts × 100, rounded */
   auraAlertsNoReturnRate: number;
-  /** noReturnCases / totalRecords × 100, rounded */
-  noReturnRecordsRate: number;
   /** Records with a documented unit response */
   unitActions: number;
   /** Records with a favorable clinical outcome */
   favorableOutcomes: number;
   /** Records with any registered clinical outcome (non-empty desfecho) */
   registeredOutcomes: number;
+  /** AURA alerts with Desfecho Clínico preenchido */
+  registeredOutcomesAuraAlerts: number;
+  /** registeredOutcomesAuraAlerts / auraAlerts × 100, rounded */
+  registeredOutcomesAuraAlertsRate: number;
+  /** AURA alerts missing Desfecho Clínico (auraAlerts - registeredOutcomesAuraAlerts) */
+  registeredOutcomesAuraAlertsMissing: number;
   /** AURA alerts with unit return where the clinical outcome was normal/basal/stable */
   normalClinicalReturnAlerts: number;
   /** Unique patients behind normalClinicalReturnAlerts */
@@ -111,7 +119,15 @@ export interface DashboardMetrics {
    * AND a registered outcome, what % had a favorable outcome.
    */
   closedLoopEffectivenessRate: number;
-  /** Records where unit action shows "sem retorno" – no follow-up registered */
+  /** Denominator for closedLoopEffectivenessRate (unit action AND desfecho preenchido) */
+  closedLoopEffectivenessDenominator: number;
+  /** Numerator for closedLoopEffectivenessRate (favorable outcomes among denominator) */
+  closedLoopEffectivenessNumerator: number;
+  /** Records with unit action but missing Desfecho Clínico */
+  closedLoopMissingOutcomeAmongActions: number;
+  /**
+   * @deprecated Use auraAlertsNoReturn — sem retorno só conta com alerta AURA.
+   */
   noReturnCases: number;
 
   // Transient decompensation breakdown
@@ -139,9 +155,9 @@ export interface TemporalBucket {
   label: string;
   /** Total records in this bucket */
   total: number;
-  /** Records flagged "sem retorno" */
+  /** AURA alerts flagged sem retorno in this bucket */
   noReturn: number;
-  /** No-return rate (% of total) */
+  /** No-return rate (% of AURA alerts in bucket) */
   noReturnRate: number;
   /** Records with an effective response */
   effective: number;
@@ -278,37 +294,52 @@ export interface InitiationActionBreakdown {
   semRetornoTotal: number;
 }
 
-/** Breakdown of no-return records by initiation reason (Ação Iniciação). */
+/** Breakdown of AURA alerts sem retorno by initiation reason (Ação Iniciação). */
 export interface NoReturnReasonsBreakdown {
   available: boolean;
-  /** All records classified as sem retorno in the recorte */
+  /** Alertas AURA sem resposta da unidade */
   totalNoReturn: number;
-  /** Records with a classified initiation reason (contato ou unidade) */
-  classified: number;
-  /** Records without a classified reason (sem classificação) */
-  notClassified: number;
-  semContatoTelefonico: number;
+  /** Ação Iniciação = "Sem retorno da unidade" */
   unidadeNaoRespondeu: number;
-  /** Sem classificação — sem motivo informado em Ação Iniciação */
-  naoInformado: number;
+  /** Ação Iniciação = "Sem retorno contato telefônico" */
+  semContatoTelefonico: number;
+  /** Catch-all: blank, erro de registro, or any other unrecognized text */
+  semInformacao: number;
 }
 
 /**
- * Three-way split of the filtered dataset: returns vs sem retorno.
- * Sem retorno uses isNoReturn(); returns use Ação Iniciação subtypes.
+ * Desfecho Clínico counts for one Alteração Clínica group (Aguda or Esperada).
+ * Categories vary per group but share the same shape for convenience.
  */
-export interface RecordClassificationBreakdown {
-  available: boolean;
+export interface DesfechoBreakdown {
   total: number;
-  retornoComIntervencao: number;
-  retornoBasal: number;
+  melhoraClinica: number;
+  condicaoBasal: number;
+  finitude: number;
+  reintercacao: number;
+  erroRegistro: number;
   semRetorno: number;
-  /** Registros com retorno mas sem classificação reconhecida em Ação Iniciação */
-  unclassifiedReturns: number;
-  retornoComIntervencaoPercent: number;
-  retornoBasalPercent: number;
-  semRetornoPercent: number;
-  /** retornoComIntervencao + retornoBasal + semRetorno === total */
+  semInformacao: number;
+}
+
+/** Breakdown of AURA alerts com retorno (Intervenção Unidade = Sim | Reavaliação). */
+export interface ReturnReasonsBreakdown {
+  available: boolean;
+  totalWithReturn: number;
+  /** Records with "Descompensação Aguda" as Alteração Clínica */
+  aguda: DesfechoBreakdown;
+  /** Records with "Descompensação Transitória Esperada" as Alteração Clínica */
+  esperada: DesfechoBreakdown;
+  /** Com retorno but Alteração Clínica is blank or unrecognized */
+  outros: number;
+}
+
+/** Visão geral: alertas AURA = com retorno + sem retorno. */
+export interface AuraAlertSplitBreakdown {
+  available: boolean;
+  totalAuraAlerts: number;
+  alertsWithReturn: number;
+  auraAlertsNoReturn: number;
   sumMatchesTotal: boolean;
 }
 
@@ -346,12 +377,26 @@ export interface DecompensationAnalysis {
 
   /** Acute decompensation. */
   acuteTotal: number;
+  /** Count of DISTINCT patients (not patient-days) with acute decompensation. */
+  acuteUniquePatients: number;
   acuteEffectivePatients: number;
   acuteEffectiveRate: number;
   deteriorationReversals: number;
   /** Acute patient-days with "em monitoramento" — excluded from não reverteu. */
   acuteMonitoringPatients: number;
   avoidedReadmissions: number;
+  /** Per-patient detail list for the acute decompensation card. */
+  acutePatientDetails: AcutePatientDetail[];
+}
+
+/** Summary of one unique patient's acute decompensation episode. */
+export interface AcutePatientDetail {
+  patientName: string;
+  unit: string | null;
+  /** Number of distinct patient-days with acute decompensation. */
+  days: number;
+  /** Consolidated outcome across all patient-days (worst-case priority). */
+  outcome: "reverteu" | "nao_reverteu" | "monitoramento";
 }
 
 /** Per-patient split of transient alerts (row counts). */
@@ -389,7 +434,8 @@ export interface DashboardResponse {
   reinternacaoAlertAnalysis: ReinternacaoAlertAnalysis;
   initiationBreakdown: InitiationActionBreakdown;
   noReturnReasons: NoReturnReasonsBreakdown;
-  recordClassification: RecordClassificationBreakdown;
+  returnReasons: ReturnReasonsBreakdown;
+  auraAlertSplit: AuraAlertSplitBreakdown;
   decompensation: DecompensationAnalysis;
   patientAlertRanking: PatientAlertRanking;
   totalRows: number;

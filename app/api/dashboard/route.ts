@@ -8,7 +8,8 @@ import {
   calculateResponsiveness,
   calculateInitiationBreakdown,
   calculateNoReturnReasons,
-  calculateRecordClassification,
+  calculateReturnReasons,
+  calculateAuraAlertSplit,
   calculateDecompensation,
   calculatePatientAlertRanking,
 } from "@/lib/dashboard/calculateMetrics";
@@ -42,7 +43,8 @@ export async function GET(request: NextRequest) {
       responsiveness: calculateResponsiveness(filtered),
       initiationBreakdown: calculateInitiationBreakdown(filtered),
       noReturnReasons: calculateNoReturnReasons(filtered),
-      recordClassification: calculateRecordClassification(filtered),
+      returnReasons: calculateReturnReasons(filtered),
+      auraAlertSplit: calculateAuraAlertSplit(filtered),
       decompensation: calculateDecompensation(filtered),
       patientAlertRanking: calculatePatientAlertRanking(filtered),
       // Reinternações × Aura segue APENAS o filtro de data (pela Data Alta da

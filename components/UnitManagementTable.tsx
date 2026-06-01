@@ -35,7 +35,7 @@ export function UnitManagementTable({ data }: Props) {
                 "Atuações",
                 "Desfechos favoráveis",
                 "Efetividade",
-                "Sem retorno",
+                "Sem retorno (alertas)",
               ].map((h) => (
                 <th
                   key={h}

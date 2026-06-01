@@ -21,7 +21,6 @@ interface Props {
 }
 
 export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) {
-  const noReturnRecordsPct = metrics.noReturnRecordsRate;
   const noReturnAlertsPct = metrics.auraAlertsNoReturnRate;
 
   const r = responsiveness;
@@ -38,13 +37,10 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed max-w-3xl">
             <strong className="text-amber-300">
-              {metrics.noReturnCases} registros
-            </strong>{" "}
-            ({noReturnRecordsPct}% dos registros) e{" "}
-            <strong className="text-amber-300">
               {metrics.auraAlertsNoReturn} alertas AURA
             </strong>{" "}
-            ({noReturnAlertsPct}% dos alertas) estão sem retorno. A análise
+            ({noReturnAlertsPct}% dos {metrics.auraAlerts} alertas) estão sem
+            retorno. A análise
             abaixo mostra <em>quando</em> o ciclo
             assistencial mais falha — por turno, dia da semana e horário — para
             direcionar o plano de ação.
@@ -136,43 +132,46 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
       )}
 
       {/* Action plan */}
-      {hasTemporal && r!.actionPlan.length > 0 && (
-        <div className="rounded-lg border border-teal-900/50 bg-teal-950/20 p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Lightbulb className="h-4 w-4 text-teal-300" />
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-teal-300">
-              Plano de ação sugerido
-            </h3>
+      {(() => {
+        const fixedItems = [
+          "Aumentar a adesão ao tablet: garantir que todos os pacientes monitorados tenham tablet disponível para registro de sinais vitais, viabilizando a geração dos alertas AURA.",
+          "Avaliar contatos com dificuldades nas ligações: identificar pacientes e familiares com baixa taxa de resposta e mapear barreiras (telefone errado, disponibilidade, etc.).",
+          "Avaliar a régua / pertinência dos alertas: revisar os critérios de disparo para equilibrar sensibilidade e especificidade, reduzindo alertas de baixa prioridade sem perder casos críticos.",
+        ];
+
+        const dynamicItems: string[] = [];
+        if (metrics.normalClinicalReturnAlerts > 0) {
+          dynamicItems.push(
+            `Subir a régua dos critérios de alerta: ${metrics.normalClinicalReturnAlerts} alerta${metrics.normalClinicalReturnAlerts !== 1 ? "s" : ""} com retorno indicaram quadro normal/basal/estável (${metrics.normalClinicalReturnAmongReturnRate}% dos alertas com retorno). Revise limiares e combinações de sinais para reduzir alertas de baixa prioridade.`
+          );
+        }
+        if (hasTemporal && r!.actionPlan.length > 0) {
+          dynamicItems.push(...r!.actionPlan);
+        }
+
+        const allItems = [...dynamicItems, ...fixedItems];
+
+        return (
+          <div className="rounded-lg border border-teal-900/50 bg-teal-950/20 p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Lightbulb className="h-4 w-4 text-teal-300" />
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-teal-300">
+                Oportunidades de melhoria · Plano de ação sugerido
+              </h3>
+            </div>
+            <ul className="space-y-2.5">
+              {allItems.map((item, i) => (
+                <li key={i} className="flex gap-2.5 text-sm text-slate-300">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-900/60 text-xs font-bold text-teal-300">
+                    {i + 1}
+                  </span>
+                  <span className="leading-relaxed">{item}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="space-y-2.5">
-            {metrics.normalClinicalReturnAlerts > 0 && (
-              <li className="flex gap-2.5 text-sm text-slate-300">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-900/60 text-xs font-bold text-teal-300">
-                  1
-                </span>
-                <span className="leading-relaxed">
-                  Subir a régua dos critérios de alerta:{" "}
-                  {metrics.normalClinicalReturnAlerts} alerta
-                  {metrics.normalClinicalReturnAlerts !== 1 ? "s" : ""} com
-                  retorno indicaram quadro normal/basal/estável (
-                  {metrics.normalClinicalReturnAmongReturnRate}% dos alertas com
-                  retorno).
-                  Revise limiares e combinações de sinais para reduzir alertas de
-                  baixa prioridade.
-                </span>
-              </li>
-            )}
-            {r!.actionPlan.map((item, i) => (
-              <li key={i} className="flex gap-2.5 text-sm text-slate-300">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-900/60 text-xs font-bold text-teal-300">
-                  {i + (metrics.normalClinicalReturnAlerts > 0 ? 2 : 1)}
-                </span>
-                <span className="leading-relaxed">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Legend / no data */}
       {!hasTemporal && (
