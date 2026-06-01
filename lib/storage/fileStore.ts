@@ -17,6 +17,13 @@ import path from "path";
 const token = process.env.BLOB_READ_WRITE_TOKEN;
 const useBlob = Boolean(token);
 
+// On Vercel/Lambda the function filesystem is read-only. If we ever reach the
+// local-fs fallback there, a write fails with a cryptic EROFS. Detect it and
+// surface an actionable message instead.
+const isServerless = Boolean(
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+);
+
 const LOCAL_DIR = path.join(process.cwd(), "data");
 const localPath = (name: string) => path.join(LOCAL_DIR, name);
 
@@ -26,6 +33,14 @@ export async function saveFile(
   body: Buffer | string,
   contentType: string
 ): Promise<void> {
+  if (!useBlob && isServerless) {
+    throw new Error(
+      "Armazenamento não configurado: a env BLOB_READ_WRITE_TOKEN não está " +
+        "disponível nesta função. Crie um Vercel Blob store, conecte ao projeto " +
+        "e faça um Redeploy. O filesystem da função é somente-leitura."
+    );
+  }
+
   if (useBlob) {
     await put(name, body, {
       access: "public",
