@@ -4,6 +4,7 @@ import { useState } from "react";
 import { RefreshCw, Database, Clock, Wifi, WifiOff } from "lucide-react";
 import { UploadPrompt } from "@/components/UploadPrompt";
 import { ReinternacaoUpload } from "@/components/ReinternacaoUpload";
+import { IntercorrenciaUpload } from "@/components/IntercorrenciaUpload";
 
 interface Props {
   lastFetchAt: string | null;
@@ -12,7 +13,9 @@ interface Props {
   onRefresh: () => Promise<void>;
   onUploadSuccess: (result: { filename: string; rowCount: number }) => void;
   onReinternacaoUpload?: (rowCount: number) => void;
+  onIntercorrenciaUpload?: (rowCount: number) => void;
   reinternacaoRowCount?: number | null;
+  intercorrenciaRowCount?: number | null;
   autoRefreshSeconds: number;
   dataSource?: string;
 }
@@ -24,7 +27,9 @@ export function DashboardHeader({
   onRefresh,
   onUploadSuccess,
   onReinternacaoUpload,
+  onIntercorrenciaUpload,
   reinternacaoRowCount,
+  intercorrenciaRowCount,
   autoRefreshSeconds,
   dataSource = "CSV local",
 }: Props) {
@@ -72,6 +77,10 @@ export function DashboardHeader({
 
           {/* Upload buttons */}
           <div className="shrink-0 flex items-center gap-2 flex-wrap justify-end">
+            <IntercorrenciaUpload
+              onUploadSuccess={onIntercorrenciaUpload}
+              rowCount={intercorrenciaRowCount}
+            />
             <ReinternacaoUpload
               onUploadSuccess={onReinternacaoUpload}
               rowCount={reinternacaoRowCount}

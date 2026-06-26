@@ -260,6 +260,84 @@ export interface ReinternacaoAlertAnalysis {
 }
 
 // ---------------------------------------------------------------------------
+// Intercorrências supplementary dataset
+// ---------------------------------------------------------------------------
+
+/** One row from the "Intercorrências" CSV (e.g. Anery intercorrências export). */
+export interface IntercorrenciaRecord {
+  nr: string | null;
+  tipoIntercorrencia: string | null;
+  grauUrgencia: string | null;
+  /** "Classificação" — primary clinical reason for the intercorrência */
+  classificacao: string | null;
+  nroAtendimento: string | null;
+  patientName: string;
+  dataMaxResolucao: string | null;
+  /** "Data Início" — event start date */
+  dataInicio: string | null;
+  status: string | null;
+  dataFim: string | null;
+  operadora: string | null;
+  /** "Classificação do Desfecho" — outcome trajectory */
+  classificacaoDesfecho: string | null;
+  motivoAtendimento: string | null;
+  gerouAtendUnidMovel: string | null;
+  filial: string | null;
+}
+
+export interface IntercorrenciaCountItem {
+  label: string;
+  count: number;
+  percent: number;
+}
+
+/** AURA alert that preceded an intercorrência within the lookback window. */
+export interface PriorAuraAlertForIntercorrencia {
+  date: string;
+  unit: string | null;
+  clinicalAlteration: string | null;
+  /** Days from alert to intercorrência (0 = same day). */
+  daysBeforeIntercorrencia: number;
+}
+
+/** Cross-reference result for one intercorrência event. */
+export interface IntercorrenciaAlertMatch {
+  patientName: string;
+  intercorrenciaDate: string;
+  classificacao: string | null;
+  grauUrgencia: string | null;
+  classificacaoDesfecho: string | null;
+  filial: string | null;
+  /** True if an AURA alert occurred within 5 days before the intercorrência. */
+  hadPriorAlert: boolean;
+  priorAlerts: PriorAuraAlertForIntercorrencia[];
+}
+
+/** Weekly volume bucket for intercorrência timeline. */
+export interface IntercorrenciaTimelinePoint {
+  weekStart: string;
+  count: number;
+  withPriorAlert: number;
+}
+
+/** Aggregate intercorrência analysis with patterns and AURA cross-reference. */
+export interface IntercorrenciaAnalysis {
+  available: boolean;
+  totalIntercorrencias: number;
+  withPriorAlert: number;
+  withoutPriorAlert: number;
+  /** Top clinical reasons (Classificação). */
+  topReasons: IntercorrenciaCountItem[];
+  /** Distribution by urgency level. */
+  urgencyBreakdown: IntercorrenciaCountItem[];
+  /** Outcome trajectory (Classificação do Desfecho). */
+  outcomeTrajectory: IntercorrenciaCountItem[];
+  /** Weekly intercorrência volume with AURA overlap. */
+  timeline: IntercorrenciaTimelinePoint[];
+  matches: IntercorrenciaAlertMatch[];
+}
+
+// ---------------------------------------------------------------------------
 // Initiation-action breakdown (motivos, derived from "Ação Iniciação")
 // ---------------------------------------------------------------------------
 
@@ -432,6 +510,7 @@ export interface DashboardResponse {
   timeSeries: TimeSeriesPoint[];
   responsiveness: ResponsivenessAnalysis;
   reinternacaoAlertAnalysis: ReinternacaoAlertAnalysis;
+  intercorrenciaAnalysis: IntercorrenciaAnalysis;
   initiationBreakdown: InitiationActionBreakdown;
   noReturnReasons: NoReturnReasonsBreakdown;
   returnReasons: ReturnReasonsBreakdown;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, type ActiveFilters } from "@/components/FiltersBar";
 import { KpiCard } from "@/components/KpiCard";
@@ -9,10 +10,6 @@ import { ClosedLoopPanel } from "@/components/ClosedLoopPanel";
 import { METRIC_TOOLTIPS } from "@/lib/dashboard/metricTooltips";
 import { ClinicalIndicatorsPanel } from "@/components/ClinicalIndicatorsPanel";
 import { PatientAlertRankingPanel } from "@/components/PatientAlertRankingPanel";
-import { UnitManagementTable } from "@/components/UnitManagementTable";
-import { TimeSeriesChart } from "@/components/TimeSeriesChart";
-import { ImprovementOpportunityPanel } from "@/components/ImprovementOpportunityPanel";
-import { ReinternacaoAlertPanel } from "@/components/ReinternacaoAlertPanel";
 import { InitiationReasonsPanel } from "@/components/InitiationReasonsPanel";
 import { UploadPrompt } from "@/components/UploadPrompt";
 import {
@@ -28,6 +25,54 @@ import {
   XCircle,
   AlertTriangle,
 } from "lucide-react";
+
+function PanelSkeleton({ tall = false }: { tall?: boolean }) {
+  return (
+    <div
+      className={`rounded-xl bg-slate-800/60 animate-pulse ${tall ? "h-56" : "h-40"}`}
+    />
+  );
+}
+
+const UnitManagementTable = dynamic(
+  () =>
+    import("@/components/UnitManagementTable").then((m) => ({
+      default: m.UnitManagementTable,
+    })),
+  { loading: () => <PanelSkeleton /> }
+);
+
+const TimeSeriesChart = dynamic(
+  () =>
+    import("@/components/TimeSeriesChart").then((m) => ({
+      default: m.TimeSeriesChart,
+    })),
+  { loading: () => <PanelSkeleton /> }
+);
+
+const ImprovementOpportunityPanel = dynamic(
+  () =>
+    import("@/components/ImprovementOpportunityPanel").then((m) => ({
+      default: m.ImprovementOpportunityPanel,
+    })),
+  { loading: () => <PanelSkeleton /> }
+);
+
+const ReinternacaoAlertPanel = dynamic(
+  () =>
+    import("@/components/ReinternacaoAlertPanel").then((m) => ({
+      default: m.ReinternacaoAlertPanel,
+    })),
+  { loading: () => <PanelSkeleton tall /> }
+);
+
+const IntercorrenciaPanel = dynamic(
+  () =>
+    import("@/components/IntercorrenciaPanel").then((m) => ({
+      default: m.IntercorrenciaPanel,
+    })),
+  { loading: () => <PanelSkeleton tall /> }
+);
 
 const REFRESH_SECONDS = parseInt(
   process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_SECONDS ?? "60",
@@ -92,6 +137,7 @@ export function DashboardClient() {
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [reinternacaoRowCount, setReinternacaoRowCount] = useState<number | null>(null);
+  const [intercorrenciaRowCount, setIntercorrenciaRowCount] = useState<number | null>(null);
 
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -162,6 +208,20 @@ export function DashboardClient() {
     }
   }, []);
 
+  const fetchIntercorrenciaStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/intercorrencias-status");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.loaded && json.meta?.rowCount) {
+          setIntercorrenciaRowCount(json.meta.rowCount);
+        }
+      }
+    } catch {
+      // non-critical
+    }
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     await fetch("/api/refresh", { method: "POST" });
     await Promise.all([fetchDashboard(filtersRef.current), fetchFilters()]);
@@ -196,7 +256,8 @@ export function DashboardClient() {
     fetchFilters();
     fetchHealth();
     fetchReinternacaoStatus();
-  }, [fetchDashboard, fetchFilters, fetchHealth, fetchReinternacaoStatus]);
+    fetchIntercorrenciaStatus();
+  }, [fetchDashboard, fetchFilters, fetchHealth, fetchReinternacaoStatus, fetchIntercorrenciaStatus]);
 
   useEffect(() => {
     fetchDashboard(filters);
@@ -226,7 +287,12 @@ export function DashboardClient() {
           setReinternacaoRowCount(count);
           fetchDashboard(filtersRef.current);
         }}
+        onIntercorrenciaUpload={(count) => {
+          setIntercorrenciaRowCount(count);
+          fetchDashboard(filtersRef.current);
+        }}
         reinternacaoRowCount={reinternacaoRowCount}
+        intercorrenciaRowCount={intercorrenciaRowCount}
         autoRefreshSeconds={REFRESH_SECONDS}
         dataSource={dataSource}
       />
@@ -328,6 +394,7 @@ export function DashboardClient() {
             <ReinternacaoAlertPanel
               analysis={data.reinternacaoAlertAnalysis}
             />
+            <IntercorrenciaPanel analysis={data.intercorrenciaAnalysis} />
             <UnitManagementTable data={data.unitSummaries} />
             <TimeSeriesChart data={data.timeSeries} />
             <ImprovementOpportunityPanel

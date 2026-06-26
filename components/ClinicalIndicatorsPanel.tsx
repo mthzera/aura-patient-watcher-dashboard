@@ -1,12 +1,25 @@
 "use client";
 
-import { AcutePatientDetail, DecompensationAnalysis } from "@/lib/dashboard/types";
+import { LazyLoadFooter, ScrollTable } from "@/components/LazyScrollTable";
+import { useLazyList } from "@/components/useLazyList";
+import { DecompensationAnalysis } from "@/lib/dashboard/types";
 
 interface Props {
   decompensation?: DecompensationAnalysis;
 }
 
 export function ClinicalIndicatorsPanel({ decompensation }: Props) {
+  const acuteDetails = decompensation?.acutePatientDetails ?? [];
+  const {
+    scrollRef,
+    sentinelRef,
+    visibleItems: visibleAcuteDetails,
+    visibleCount,
+    totalCount,
+    hasMore,
+    loadMore,
+  } = useLazyList(acuteDetails);
+
   if (!decompensation) return null;
 
   const d = decompensation;
@@ -23,7 +36,6 @@ export function ClinicalIndicatorsPanel({ decompensation }: Props) {
     d.acuteTotal - d.deteriorationReversals - acuteMonitoring
   );
   const acuteUnique = d.acuteUniquePatients ?? d.acuteTotal;
-  const acuteDetails: AcutePatientDetail[] = d.acutePatientDetails ?? [];
 
   // Patient-days with no decompensation event (routine/stable monitoring).
   // Fall back if an older API response lacks decompensatedPatientDays.
@@ -157,29 +169,49 @@ export function ClinicalIndicatorsPanel({ decompensation }: Props) {
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
                 Pacientes
               </p>
-              <ul className="space-y-1.5">
-                {acuteDetails.map((p) => (
-                  <li key={p.patientName} className="flex items-start justify-between gap-2 text-xs">
-                    <span className="text-slate-200 font-medium leading-tight">{p.patientName}</span>
-                    <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${
-                        p.outcome === "reverteu"
-                          ? "bg-emerald-900/60 text-emerald-300"
-                          : p.outcome === "nao_reverteu"
-                          ? "bg-rose-900/60 text-rose-300"
-                          : "bg-slate-700/60 text-slate-400"
-                      }`}
+              <ScrollTable
+                scrollRef={scrollRef}
+                maxHeightClass="max-h-[min(220px,35vh)]"
+                className="rounded-none border-0"
+              >
+                <ul className="space-y-1.5 px-1 py-1">
+                  {visibleAcuteDetails.map((p) => (
+                    <li
+                      key={p.patientName}
+                      className="flex items-start justify-between gap-2 text-xs"
                     >
-                      {p.outcome === "reverteu"
-                        ? "Reverteu"
-                        : p.outcome === "nao_reverteu"
-                        ? "Não reverteu"
-                        : "Monitoramento"}
-                      {p.days > 1 ? ` · ${p.days}d` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <span className="text-slate-200 font-medium leading-tight">
+                        {p.patientName}
+                      </span>
+                      <span
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${
+                          p.outcome === "reverteu"
+                            ? "bg-emerald-900/60 text-emerald-300"
+                            : p.outcome === "nao_reverteu"
+                              ? "bg-rose-900/60 text-rose-300"
+                              : "bg-slate-700/60 text-slate-400"
+                        }`}
+                      >
+                        {p.outcome === "reverteu"
+                          ? "Reverteu"
+                          : p.outcome === "nao_reverteu"
+                            ? "Não reverteu"
+                            : "Monitoramento"}
+                        {p.days > 1 ? ` · ${p.days}d` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {hasMore && (
+                  <div ref={sentinelRef} className="h-6 shrink-0" aria-hidden />
+                )}
+              </ScrollTable>
+              <LazyLoadFooter
+                visibleCount={visibleCount}
+                totalCount={totalCount}
+                hasMore={hasMore}
+                onLoadMore={loadMore}
+              />
             </div>
           )}
         </div>

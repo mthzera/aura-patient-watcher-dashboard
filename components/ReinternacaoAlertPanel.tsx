@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -8,6 +8,12 @@ import {
   ChevronUp,
   ShieldAlert,
 } from "lucide-react";
+import {
+  LazyLoadFooter,
+  ScrollTable,
+  STICKY_TABLE_HEAD,
+} from "@/components/LazyScrollTable";
+import { useLazyList } from "@/components/useLazyList";
 import type {
   ReinternacaoAlertAnalysis,
   ReinternacaoAlertMatch,
@@ -20,6 +26,25 @@ interface Props {
 export function ReinternacaoAlertPanel({ analysis }: Props) {
   const [filter, setFilter] = useState<"all" | "with" | "without">("all");
   const [expandedName, setExpandedName] = useState<string | null>(null);
+
+  const filteredMatches = useMemo(() => {
+    if (!analysis.available) return [];
+    return analysis.matches.filter((m) => {
+      if (filter === "with") return m.hadPriorAlert;
+      if (filter === "without") return !m.hadPriorAlert;
+      return true;
+    });
+  }, [analysis.available, analysis.matches, filter]);
+
+  const {
+    scrollRef,
+    sentinelRef,
+    visibleItems: lazyMatches,
+    visibleCount,
+    totalCount,
+    hasMore,
+    loadMore,
+  } = useLazyList(filteredMatches);
 
   if (!analysis.available) {
     return (
@@ -40,12 +65,6 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
       </section>
     );
   }
-
-  const visibleMatches = analysis.matches.filter((m) => {
-    if (filter === "with") return m.hadPriorAlert;
-    if (filter === "without") return !m.hadPriorAlert;
-    return true;
-  });
 
   const coveragePct =
     analysis.totalReinternacoes > 0
@@ -152,47 +171,57 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
             ))}
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto rounded-lg border border-slate-700/60">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-slate-700 bg-slate-800/60 text-left">
-                  <th className="px-3 py-2 font-semibold text-slate-400">Paciente</th>
-                  <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Data alta</th>
-                  <th className="px-3 py-2 font-semibold text-slate-400">Condição</th>
-                  <th className="px-3 py-2 font-semibold text-slate-400 text-center">Alerta prévio</th>
-                  <th className="px-3 py-2 font-semibold text-slate-400">Motivo alerta AURA</th>
-                  <th className="px-3 py-2 w-8" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {visibleMatches.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-3 py-6 text-center text-slate-500"
-                    >
-                      Nenhum registro para este filtro.
-                    </td>
+          <div className="overflow-hidden rounded-lg border border-slate-700/60">
+            <ScrollTable scrollRef={scrollRef} className="rounded-none border-0">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className={STICKY_TABLE_HEAD}>
+                    <th className="px-3 py-2 font-semibold text-slate-400">Paciente</th>
+                    <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Data alta</th>
+                    <th className="px-3 py-2 font-semibold text-slate-400">Condição</th>
+                    <th className="px-3 py-2 font-semibold text-slate-400 text-center">Alerta prévio</th>
+                    <th className="px-3 py-2 font-semibold text-slate-400">Motivo alerta AURA</th>
+                    <th className="px-3 py-2 w-8" />
                   </tr>
-                ) : (
-                  visibleMatches.map((m) => (
-                    <MatchRow
-                      key={`${m.patientName}-${m.reinternacaoDate}`}
-                      match={m}
-                      isExpanded={expandedName === `${m.patientName}-${m.reinternacaoDate}`}
-                      onToggle={() =>
-                        setExpandedName((prev) =>
-                          prev === `${m.patientName}-${m.reinternacaoDate}`
-                            ? null
-                            : `${m.patientName}-${m.reinternacaoDate}`
-                        )
-                      }
-                    />
-                  ))
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {filteredMatches.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-3 py-6 text-center text-slate-500"
+                      >
+                        Nenhum registro para este filtro.
+                      </td>
+                    </tr>
+                  ) : (
+                    lazyMatches.map((m) => (
+                      <MatchRow
+                        key={`${m.patientName}-${m.reinternacaoDate}`}
+                        match={m}
+                        isExpanded={expandedName === `${m.patientName}-${m.reinternacaoDate}`}
+                        onToggle={() =>
+                          setExpandedName((prev) =>
+                            prev === `${m.patientName}-${m.reinternacaoDate}`
+                              ? null
+                              : `${m.patientName}-${m.reinternacaoDate}`
+                          )
+                        }
+                      />
+                    ))
+                  )}
+                </tbody>
+              </table>
+              {hasMore && (
+                <div ref={sentinelRef} className="h-8 shrink-0" aria-hidden />
+              )}
+            </ScrollTable>
+            <LazyLoadFooter
+              visibleCount={visibleCount}
+              totalCount={totalCount}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
+            />
           </div>
         </>
       )}
