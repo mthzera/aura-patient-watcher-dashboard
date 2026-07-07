@@ -42,3 +42,17 @@ export function unitMatchesFilial(
   // Fallback: direct match (e.g. filial column equals unit code)
   return matchesCaseInsensitive(filial, unit);
 }
+
+/** Match dashboard unit against row unit (Command Center) or filial (altas Anery). */
+export function unitMatchesReinternacao(
+  unit: string,
+  row: { unit?: string | null; filial?: string | null }
+): boolean {
+  if (row.unit?.trim()) {
+    return matchesCaseInsensitive(row.unit, unit);
+  }
+  if (row.filial?.trim()) {
+    return unitMatchesFilial(unit, row.filial);
+  }
+  return false;
+}

@@ -29,11 +29,13 @@ export interface ReinternacaoRecord {
   dataInicioAtendimento: string | null;
   /** "ID Carteira" */
   idCarteira: string | null;
-  /** "Data Alta" — the event date (hospitalization or death) */
+  /** "Data Alta" / "Data da Reinternação" — event date */
   dischargeDate: string | null;
-  /** "Filial" */
+  /** "Filial" (exportação de altas Anery) */
   filial: string | null;
-  /** "Condição Alta" — "Hospitalização" | "Óbito" */
+  /** "Unidade" (exportação Command Center: ABV, MO, IB, …) */
+  unit: string | null;
+  /** "Condição Alta" / "Desfecho" */
   conditionOnDischarge: string | null;
   /** "ID Paciente" */
   idPaciente: string | null;
@@ -240,8 +242,10 @@ export interface ReinternacaoAlertMatch {
   patientName: string;
   /** Date from "Data Alta" in the reinternações file. */
   reinternacaoDate: string;
-  /** "Filial" from the reinternações spreadsheet (e.g. ANERY SP). */
+  /** "Filial" from altas export, or "Unidade" from Command Center export. */
   filial: string | null;
+  /** Unidade assistencial when present (Command Center). */
+  unit: string | null;
   conditionOnDischarge: string | null;
   /** True if at least one AURA alert occurred within the 10 days prior. */
   hadPriorAlert: boolean;

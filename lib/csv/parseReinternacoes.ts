@@ -1,12 +1,9 @@
 /**
  * Parser for the "Reinternações" supplementary CSV file.
  *
- * Expected layout (semicolon-separated, UTF-8):
- *   Nome;Status;Operadora;Motivo da Inclusão;Idade;Sexo;Data do Registro;
- *   Data Início Atendimento;ID Carteira;Data Alta;Filial;Condição Alta;
- *   ID Paciente;Rota Entrega;Cod. Zon.;Nro Atend;...
- *
- * The file is persisted under the name reinternacoes.csv by the upload endpoint.
+ * Supports two layouts (semicolon-separated):
+ *   A) Altas Anery: Nome;…;Data Alta;Filial;Condição Alta;…
+ *   B) Command Center: Unidade;Convênio;Nome;…;Data da Reinternação;Desfecho;…
  */
 
 import * as XLSX from "xlsx";
@@ -50,11 +47,12 @@ export async function saveReinternacaoMetadata(
 /** Normalize a column header to a stable lowercase ASCII key. */
 function normalizeKey(raw: string): string {
   return raw
+    .replace(/^\uFEFF/, "")
     .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[\s\-/]+/g, "_")
+    .replace(/[\s\-/\.]+/g, "_")
     .replace(/[^a-z0-9_]/g, "");
 }
 
@@ -62,7 +60,9 @@ function normalizeKey(raw: string): string {
 const COL: Record<string, string> = {
   nome: "patientName",
   status: "status",
+  situacao: "status",
   operadora: "operadora",
+  convenio: "operadora",
   motivo_da_inclusao: "motivoInclusao",
   motivo_inclusao: "motivoInclusao",
   idade: "idade",
@@ -71,8 +71,11 @@ const COL: Record<string, string> = {
   data_registro: "dataRegistro",
   data_inicio_atendimento: "dataInicioAtendimento",
   data_alta: "dischargeDate",
+  data_da_reinternacao: "dischargeDate",
   filial: "filial",
+  unidade: "unit",
   condicao_alta: "conditionOnDischarge",
+  desfecho: "conditionOnDischarge",
   id_paciente: "idPaciente",
   id_carteira: "idCarteira",
   nro_atend: "nroAtend",
@@ -137,6 +140,7 @@ export function parseReinternacoesBuffer(buffer: Buffer): ReinternacaoRecord[] {
       idCarteira: r.idCarteira,
       dischargeDate: r.dischargeDate,
       filial: r.filial,
+      unit: r.unit,
       conditionOnDischarge: r.conditionOnDischarge,
       idPaciente: r.idPaciente,
       nroAtend: r.nroAtend,

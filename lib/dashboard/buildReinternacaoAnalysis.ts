@@ -3,9 +3,7 @@
  * (hospitalization/readmission or death), check whether an AURA committee alert
  * was issued in the 10 days prior.
  *
- * The reinternações file carries branch ("Filial") per row. Dashboard unit
- * filters map to Filial (e.g. AHC → ANERY SP). Clinical filters use the
- * main AURA sheet by patient name.
+ * Supports altas Anery (Filial) and Command Center (Unidade) exports.
  */
 
 import type {
@@ -17,7 +15,7 @@ import type {
   PriorAlert,
 } from "./types";
 import { applyFilters, parseDate } from "./applyFilters";
-import { unitMatchesFilial } from "./unitFilialMap";
+import { unitMatchesReinternacao } from "./unitFilialMap";
 
 const PRIOR_ALERT_DAYS = 10;
 
@@ -45,7 +43,7 @@ function daysBetween(fromISO: string, toISO: string): number {
   return Math.round((to.getTime() - from.getTime()) / msPerDay);
 }
 
-function isReinternacao(conditionOnDischarge: string | null): boolean {
+function isAltaCondition(conditionOnDischarge: string | null): boolean {
   const n = normalize(conditionOnDischarge);
   return (
     n.includes("hospitalizacao") ||
@@ -55,6 +53,11 @@ function isReinternacao(conditionOnDischarge: string | null): boolean {
     n.includes("obito") ||
     n.includes("obit")
   );
+}
+
+function isReinternacaoEvent(rein: ReinternacaoRecord): boolean {
+  if (rein.unit?.trim()) return true;
+  return isAltaCondition(rein.conditionOnDischarge);
 }
 
 function nonDateFilters(
@@ -103,10 +106,10 @@ function matchesReinternacaoRow(
   records: PatientRecord[],
   filters?: DashboardFilters
 ): boolean {
-  if (!isReinternacao(rein.conditionOnDischarge)) return false;
+  if (!isReinternacaoEvent(rein)) return false;
   if (!matchesDischargeDateFilter(rein.dischargeDate, filters)) return false;
 
-  if (filters?.unit && !unitMatchesFilial(filters.unit, rein.filial)) {
+  if (filters?.unit && !unitMatchesReinternacao(filters.unit, rein)) {
     return false;
   }
 
@@ -206,6 +209,7 @@ export function buildReinternacaoAlertAnalysis(
       patientName: rein.patientName,
       reinternacaoDate: rein.dischargeDate ?? "",
       filial: rein.filial,
+      unit: rein.unit,
       conditionOnDischarge: rein.conditionOnDischarge,
       hadPriorAlert: priorAlerts.length > 0,
       priorAlerts,

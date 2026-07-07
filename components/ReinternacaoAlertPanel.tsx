@@ -186,7 +186,7 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
                   <tr className={STICKY_TABLE_HEAD}>
                     <th className="px-3 py-2 font-semibold text-slate-400">Paciente</th>
                     <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Data alta</th>
-                    <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Filial</th>
+                    <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Unidade</th>
                     <th className="px-3 py-2 font-semibold text-slate-400">Condição</th>
                     <th className="px-3 py-2 font-semibold text-slate-400 text-center">Alerta prévio</th>
                     <th className="px-3 py-2 font-semibold text-slate-400">Motivo alerta AURA</th>
@@ -269,7 +269,7 @@ function MatchRow({
           {formatDate(match.reinternacaoDate)}
         </td>
         <td className="px-3 py-2 text-slate-400 whitespace-nowrap">
-          {match.filial ?? "—"}
+          {match.unit ?? match.filial ?? "—"}
         </td>
         <td className="px-3 py-2 text-slate-400 max-w-[160px] truncate">
           {match.conditionOnDischarge ?? "—"}
