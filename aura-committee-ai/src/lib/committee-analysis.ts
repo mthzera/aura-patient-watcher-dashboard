@@ -57,6 +57,7 @@ export interface TrainingDatasetRow {
   temperature: number | null;
   completeness: number | null;
   aura_alerted_flag: number;
+  acute_decompensation_flag: number;
   triage_score: number;
   triage_band: TriageBand;
   target_label: string;
@@ -174,6 +175,7 @@ const LABEL_DEFS = [
 ] as const;
 
 const FINAL_EVENT_TERMS = ["reintern", "hospitaliza", "internacao hospitalar", "internação hospitalar", "obito", "óbito"];
+const ACUTE_TERMS = ["descompensacao aguda", "descompensação aguda"];
 
 export function analyzeWorkbook(buffer: Buffer): TriageAnalysis {
   const workbook = XLSX.read(buffer, {
@@ -310,6 +312,10 @@ function includesAny(value: string | null, terms: string[]): boolean {
   if (!value) return false;
   const normalized = value.toLowerCase();
   return terms.some((term) => normalized.includes(term));
+}
+
+function isAcuteDecompensation(value: string | null): boolean {
+  return includesAny(value, ACUTE_TERMS);
 }
 
 function buildCase(row: Row, index: number): TriageCase {
@@ -617,6 +623,7 @@ function buildTrainingRows(cases: TriageCase[]): TrainingDatasetRow[] {
     temperature: item.temperature,
     completeness: item.completeness,
     aura_alerted_flag: isYes(item.auraAlerted) ? 1 : 0,
+    acute_decompensation_flag: isAcuteDecompensation(item.clinicalAlteration) ? 1 : 0,
     triage_score: item.score,
     triage_band: item.band,
     target_label: item.trainingLabel,

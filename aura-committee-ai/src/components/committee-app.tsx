@@ -54,6 +54,10 @@ export function CommitteeApp() {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [prediction, setPrediction] = useState<{ prob_readmission: number; prob_effective: number; explanation: string } | null>(null);
+  const [loadingPrediction, setLoadingPrediction] = useState(false);
+
   useEffect(() => {
     let ignore = false;
 
@@ -107,6 +111,38 @@ export function CommitteeApp() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleAnalyzePatient(patientId: string) {
+    if (!analysis) return;
+    const trainingRow = analysis.trainingRows.find(r => r.patient_id === patientId);
+    if (!trainingRow) return;
+
+    setSelectedPatientId(patientId);
+    setPrediction(null);
+    setLoadingPrediction(true);
+
+    fetch("/api/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(trainingRow),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        setPrediction(data);
+      })
+      .catch(err => {
+        console.error(err);
+        setPrediction({
+          prob_readmission: 0,
+          prob_effective: 0,
+          explanation: "Erro ao gerar explicação. Verifique se os modelos foram treinados."
+        });
+      })
+      .finally(() => {
+        setLoadingPrediction(false);
+      });
   }
 
   function handleDownload() {
@@ -410,7 +446,13 @@ export function CommitteeApp() {
                     </thead>
                     <tbody className="divide-y divide-slate-800 bg-slate-900/40">
                       {(analysis?.cases ?? []).slice(0, 12).map((item) => (
-                        <CaseRow key={item.id} item={item} />
+                        <CaseRow 
+                          key={item.id} 
+                          item={item} 
+                          onAnalyze={() => handleAnalyzePatient(item.id)}
+                          isLoading={selectedPatientId === item.id && loadingPrediction}
+                          prediction={selectedPatientId === item.id ? prediction : null}
+                        />
                       ))}
                       {!analysis && (
                         <tr>
@@ -589,44 +631,119 @@ function SignalsPanel({
   );
 }
 
-function CaseRow({ item }: { item: TriageCase }) {
+function CaseRow({ 
+  item, 
+  onAnalyze, 
+  isLoading, 
+  prediction 
+}: { 
+  item: TriageCase;
+  onAnalyze?: () => void;
+  isLoading?: boolean;
+  prediction?: { prob_readmission: number; prob_effective: number; explanation: string } | null;
+}) {
   return (
-    <tr className="align-top">
-      <td className="px-4 py-3">
-        <div className="font-medium text-slate-100">{item.patientName}</div>
-        <div className="mt-1 text-xs text-slate-500">{item.careLine ?? "Sem linha de cuidado"}</div>
-      </td>
-      <td className="px-4 py-3 text-slate-300">
-        <div>{item.unit}</div>
-        <div className="mt-1 text-xs text-slate-500">{item.bed ?? "Leito não informado"}</div>
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <BandPill band={item.band} />
-          <span className="text-slate-100">{item.score.toFixed(1)}</span>
-        </div>
-        <div className="mt-1 text-xs text-slate-500">
-          NEWS2 {fmtMaybe(item.news2Last)} · basal 7d {fmtMaybe(item.news2Average7d)}
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <div className="text-sm text-slate-200">{item.recommendation}</div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {item.reasons.map((reason) => (
-            <span key={reason} className="rounded-full border border-slate-700 bg-slate-950/70 px-2 py-1 text-[11px] text-slate-300">
-              {reason}
+    <>
+      <tr className="align-top">
+        <td className="px-4 py-3">
+          <div className="font-medium text-slate-100">{item.patientName}</div>
+          <div className="mt-1 text-xs text-slate-500">{item.careLine ?? "Sem linha de cuidado"}</div>
+          {onAnalyze && (
+            <button
+              onClick={onAnalyze}
+              disabled={isLoading}
+              className="mt-3 flex items-center gap-1.5 rounded bg-indigo-500/20 px-2 py-1 text-xs font-medium text-indigo-300 transition hover:bg-indigo-500/30 disabled:opacity-50"
+            >
+              <Brain className="h-3.5 w-3.5" />
+              {isLoading ? "Consultando IA..." : "Explicar com IA"}
+            </button>
+          )}
+        </td>
+        <td className="px-4 py-3 text-slate-300">
+          <div>{item.unit}</div>
+          <div className="mt-1 text-xs text-slate-500">{item.bed ?? "Leito não informado"}</div>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            <BandPill band={item.band} />
+            <span className="text-slate-100">{item.score.toFixed(1)}</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            NEWS2 {fmtMaybe(item.news2Last)} · basal 7d {fmtMaybe(item.news2Average7d)}
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <div className="text-sm text-slate-200">{item.recommendation}</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {item.reasons.map((reason) => (
+              <span key={reason} className="rounded-full border border-slate-700 bg-slate-950/70 px-2 py-1 text-[11px] text-slate-300">
+                {reason}
+              </span>
+            ))}
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <div className="space-y-1 text-xs text-slate-400">
+            <div>Rótulo: <span className="text-slate-200">{labelName(item.trainingLabel)}</span></div>
+            <div>Status: <span className="text-slate-200">{item.monitoringStatus ?? "n/a"}</span></div>
+            <div>Intervenção: <span className="text-slate-200">{item.interventionResult ?? item.interventionUnit ?? "n/a"}</span></div>
+          </div>
+        </td>
+      </tr>
+      {prediction && (
+        <tr>
+          <td colSpan={5} className="border-t border-indigo-500/20 bg-indigo-950/10 px-4 py-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-indigo-400" />
+              <div className="space-y-2 text-sm leading-relaxed text-indigo-100">
+                <ExplanationText text={prediction.explanation} />
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function ExplanationText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("\n").map((line, index) => {
+        if (!line.trim()) {
+          return <div key={index} className="h-2" />;
+        }
+
+        const isTitle = line.startsWith("**") && line.endsWith("**");
+        if (isTitle) {
+          return (
+            <p key={index} className="font-semibold text-indigo-50">
+              {line.slice(2, -2)}
+            </p>
+          );
+        }
+
+        const content = line.startsWith("• ") ? line.slice(2) : line;
+        const parts = content.split(/(\*\*[^*]+\*\*)/g);
+
+        return (
+          <p key={index} className="flex gap-2">
+            {line.startsWith("• ") && <span className="text-indigo-300">•</span>}
+            <span>
+              {parts.map((part, partIndex) =>
+                part.startsWith("**") && part.endsWith("**") ? (
+                  <strong key={partIndex} className="font-semibold text-indigo-50">
+                    {part.slice(2, -2)}
+                  </strong>
+                ) : (
+                  <span key={partIndex}>{part}</span>
+                )
+              )}
             </span>
-          ))}
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <div className="space-y-1 text-xs text-slate-400">
-          <div>Rótulo: <span className="text-slate-200">{labelName(item.trainingLabel)}</span></div>
-          <div>Status: <span className="text-slate-200">{item.monitoringStatus ?? "n/a"}</span></div>
-          <div>Intervenção: <span className="text-slate-200">{item.interventionResult ?? item.interventionUnit ?? "n/a"}</span></div>
-        </div>
-      </td>
-    </tr>
+          </p>
+        );
+      })}
+    </>
   );
 }
 
