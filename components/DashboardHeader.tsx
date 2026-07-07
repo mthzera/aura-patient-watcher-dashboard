@@ -5,6 +5,8 @@ import { RefreshCw, Database, Clock, Wifi, WifiOff } from "lucide-react";
 import { UploadPrompt } from "@/components/UploadPrompt";
 import { ReinternacaoUpload } from "@/components/ReinternacaoUpload";
 import { IntercorrenciaUpload } from "@/components/IntercorrenciaUpload";
+import { ExportPdfButton } from "@/components/ExportPdfButton";
+import type { ActiveFilters } from "@/components/FiltersBar";
 
 interface Props {
   lastFetchAt: string | null;
@@ -18,6 +20,8 @@ interface Props {
   intercorrenciaRowCount?: number | null;
   autoRefreshSeconds: number;
   dataSource?: string;
+  filters?: ActiveFilters;
+  canExportPdf?: boolean;
 }
 
 export function DashboardHeader({
@@ -32,6 +36,8 @@ export function DashboardHeader({
   intercorrenciaRowCount,
   autoRefreshSeconds,
   dataSource = "CSV local",
+  filters,
+  canExportPdf = false,
 }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
@@ -127,17 +133,25 @@ export function DashboardHeader({
             )}
           </div>
 
-          {/* Refresh button */}
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || isLoading}
-            className="flex items-center gap-2 rounded-md border border-slate-600 bg-slate-800 px-4 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
-            />
-            Recarregar
-          </button>
+          <div className="flex items-center gap-2">
+            {filters && (
+              <ExportPdfButton
+                filters={filters}
+                dataSource={dataSource}
+                disabled={!canExportPdf || isLoading}
+              />
+            )}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing || isLoading}
+              className="flex items-center gap-2 rounded-md border border-slate-600 bg-slate-800 px-4 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
+              />
+              Recarregar
+            </button>
+          </div>
         </div>
       </div>
     </header>

@@ -295,6 +295,8 @@ export function DashboardClient() {
         intercorrenciaRowCount={intercorrenciaRowCount}
         autoRefreshSeconds={REFRESH_SECONDS}
         dataSource={dataSource}
+        filters={filters}
+        canExportPdf={!error && (data?.filteredRows ?? 0) > 0}
       />
 
       <main className="mx-auto max-w-screen-2xl px-6 py-4 space-y-4">
