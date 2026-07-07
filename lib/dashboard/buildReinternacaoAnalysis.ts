@@ -3,22 +3,23 @@
  * (hospitalization/readmission or death), check whether an AURA committee alert
  * was issued in the 10 days prior.
  *
- * Rules:
- *   - Event of interest = conditionOnDischarge contains "hospitalizacao",
- *     "reinternacao", "internacao", or "obito".
- *   - "Notificação do comitê" = any record in the AURA main CSV for the same patient
- *     whose date is within [0, 10] days BEFORE the reinternation date.
- *   - Patient matching is fuzzy: lowercase + remove accents + collapse whitespace.
+ * The reinternações file carries branch ("Filial") per row. Dashboard unit
+ * filters map to Filial (e.g. AHC → ANERY SP). Clinical filters use the
+ * main AURA sheet by patient name.
  */
 
 import type {
+  DashboardFilters,
   PatientRecord,
   ReinternacaoRecord,
   ReinternacaoAlertAnalysis,
   ReinternacaoAlertMatch,
   PriorAlert,
 } from "./types";
-import { parseDate } from "./applyFilters";
+import { applyFilters, parseDate } from "./applyFilters";
+import { unitMatchesFilial } from "./unitFilialMap";
+
+const PRIOR_ALERT_DAYS = 10;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,7 +38,6 @@ function normalizeName(val: string | null | undefined): string {
   return normalize(val).replace(/\s+/g, " ").trim();
 }
 
-/** Days from `fromISO` to `toISO` (positive = toISO is after fromISO). */
 function daysBetween(fromISO: string, toISO: string): number {
   const msPerDay = 1000 * 60 * 60 * 24;
   const from = new Date(`${fromISO}T00:00:00`);
@@ -45,7 +45,6 @@ function daysBetween(fromISO: string, toISO: string): number {
   return Math.round((to.getTime() - from.getTime()) / msPerDay);
 }
 
-/** Returns true when conditionOnDischarge indicates hospitalization/readmission or death. */
 function isReinternacao(conditionOnDischarge: string | null): boolean {
   const n = normalize(conditionOnDischarge);
   return (
@@ -58,20 +57,96 @@ function isReinternacao(conditionOnDischarge: string | null): boolean {
   );
 }
 
+function nonDateFilters(
+  filters?: DashboardFilters
+): DashboardFilters | undefined {
+  if (!filters) return undefined;
+  const { startDate: _s, endDate: _e, ...rest } = filters;
+  const hasRest = !!(
+    rest.unit ||
+    rest.clinicalAlteration ||
+    rest.clinicalOutcome ||
+    rest.auraActionStatus
+  );
+  return hasRest ? rest : undefined;
+}
+
+function buildPatientScope(records: PatientRecord[]): Set<string> {
+  const names = new Set<string>();
+  for (const r of records) {
+    const key = normalizeName(r.patient_name);
+    if (key) names.add(key);
+  }
+  return names;
+}
+
+function hasClinicalFilters(filters?: DashboardFilters): boolean {
+  return !!(
+    filters?.clinicalAlteration ||
+    filters?.clinicalOutcome ||
+    filters?.auraActionStatus
+  );
+}
+
+/** Patient scope for clinical / outcome / atuação filters (and combos with unit). */
+function getClinicalPatientScope(
+  records: PatientRecord[],
+  filters?: DashboardFilters
+): Set<string> | null {
+  const scoped = nonDateFilters(filters);
+  if (!scoped || !hasClinicalFilters(filters)) return null;
+  return buildPatientScope(applyFilters(records, scoped));
+}
+
+function matchesReinternacaoRow(
+  rein: ReinternacaoRecord,
+  records: PatientRecord[],
+  filters?: DashboardFilters
+): boolean {
+  if (!isReinternacao(rein.conditionOnDischarge)) return false;
+  if (!matchesDischargeDateFilter(rein.dischargeDate, filters)) return false;
+
+  if (filters?.unit && !unitMatchesFilial(filters.unit, rein.filial)) {
+    return false;
+  }
+
+  const clinicalScope = getClinicalPatientScope(records, filters);
+  if (clinicalScope) {
+    const key = normalizeName(rein.patientName);
+    if (!key || !clinicalScope.has(key)) return false;
+  }
+
+  return true;
+}
+
+function recordsForPriorAlerts(
+  records: PatientRecord[],
+  filters?: DashboardFilters
+): PatientRecord[] {
+  const scoped = nonDateFilters(filters);
+  return scoped ? applyFilters(records, scoped) : records;
+}
+
+function matchesDischargeDateFilter(
+  dischargeDate: string | null,
+  filters?: DashboardFilters
+): boolean {
+  if (!filters?.startDate && !filters?.endDate) return true;
+  const d = parseDate(dischargeDate);
+  if (!d) return true;
+  if (filters.startDate && d < filters.startDate) return false;
+  if (filters.endDate && d > filters.endDate) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
-/** Optional date window (ISO YYYY-MM-DD) applied to the reinternação's discharge date. */
-interface DateRange {
-  startDate?: string;
-  endDate?: string;
-}
-
 export function buildReinternacaoAlertAnalysis(
   records: PatientRecord[],
   reinternacoes: ReinternacaoRecord[],
-  dateRange?: DateRange
+  filters?: DashboardFilters
 ): ReinternacaoAlertAnalysis {
   if (reinternacoes.length === 0) {
     return {
@@ -83,23 +158,11 @@ export function buildReinternacaoAlertAnalysis(
     };
   }
 
-  // Only hospitalizations/readmissions and deaths, optionally restricted to the
-  // dashboard's date filter (by the reinternação's discharge date). The unit and
-  // other filters are intentionally NOT applied here: the reinternação file has
-  // its own timeline/branch, so only the date window is meaningful. The prior-
-  // alert lookup below still scans ALL patient records to keep the "10 days
-  // before" window intact.
-  const hospitalizations = reinternacoes.filter((r) => {
-    if (!isReinternacao(r.conditionOnDischarge)) return false;
-    if (dateRange?.startDate || dateRange?.endDate) {
-      const d = parseDate(r.dischargeDate);
-      if (d) {
-        if (dateRange.startDate && d < dateRange.startDate) return false;
-        if (dateRange.endDate && d > dateRange.endDate) return false;
-      }
-    }
-    return true;
-  });
+  const alertRecords = recordsForPriorAlerts(records, filters);
+
+  const hospitalizations = reinternacoes.filter((r) =>
+    matchesReinternacaoRow(r, records, filters)
+  );
 
   if (hospitalizations.length === 0) {
     return {
@@ -120,14 +183,13 @@ export function buildReinternacaoAlertAnalysis(
     const patientKey = normalizeName(rein.patientName);
     if (!patientKey) continue;
 
-    // Find all AURA records for this patient with alert date within 10 days prior
-    const priorAlerts: PriorAlert[] = records
+    const priorAlerts: PriorAlert[] = alertRecords
       .filter((r) => {
         if (normalizeName(r.patient_name) !== patientKey) return false;
         const alertDate = parseDate(r.date);
         if (!alertDate) return false;
         const diff = daysBetween(alertDate, reinDate);
-        return diff >= 0 && diff <= 10;
+        return diff >= 0 && diff <= PRIOR_ALERT_DAYS;
       })
       .map((r) => {
         const alertDate = parseDate(r.date)!;
@@ -138,19 +200,18 @@ export function buildReinternacaoAlertAnalysis(
           daysBeforeReinternacao: daysBetween(alertDate, reinDate),
         };
       })
-      // Oldest first (furthest before reinternation first)
       .sort((a, b) => b.daysBeforeReinternacao - a.daysBeforeReinternacao);
 
     matches.push({
       patientName: rein.patientName,
       reinternacaoDate: rein.dischargeDate ?? "",
+      filial: rein.filial,
       conditionOnDischarge: rein.conditionOnDischarge,
       hadPriorAlert: priorAlerts.length > 0,
       priorAlerts,
     });
   }
 
-  // Sort: patients with prior alerts first, then by reinternation date desc
   matches.sort((a, b) => {
     if (a.hadPriorAlert !== b.hadPriorAlert) return a.hadPriorAlert ? -1 : 1;
     return b.reinternacaoDate.localeCompare(a.reinternacaoDate);

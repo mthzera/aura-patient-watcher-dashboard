@@ -240,6 +240,8 @@ export interface ReinternacaoAlertMatch {
   patientName: string;
   /** Date from "Data Alta" in the reinternações file. */
   reinternacaoDate: string;
+  /** "Filial" from the reinternações spreadsheet (e.g. ANERY SP). */
+  filial: string | null;
   conditionOnDischarge: string | null;
   /** True if at least one AURA alert occurred within the 10 days prior. */
   hadPriorAlert: boolean;

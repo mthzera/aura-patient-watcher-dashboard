@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -27,6 +27,11 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
   const [filter, setFilter] = useState<"all" | "with" | "without">("all");
   const [expandedName, setExpandedName] = useState<string | null>(null);
 
+  useEffect(() => {
+    setFilter("all");
+    setExpandedName(null);
+  }, [analysis.matches, analysis.totalReinternacoes]);
+
   const filteredMatches = useMemo(() => {
     if (!analysis.available) return [];
     return analysis.matches.filter((m) => {
@@ -41,10 +46,9 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
     sentinelRef,
     visibleItems: lazyMatches,
     visibleCount,
-    totalCount,
     hasMore,
     loadMore,
-  } = useLazyList(filteredMatches);
+  } = useLazyList(filteredMatches, 30, filter);
 
   if (!analysis.available) {
     return (
@@ -92,7 +96,7 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
       {analysis.totalReinternacoes === 0 ? (
         <p className="text-sm text-slate-500 text-center py-6">
           Nenhuma alta por reinternação, hospitalização ou óbito encontrada no
-          arquivo carregado.
+          recorte atual.
         </p>
       ) : (
         <>
@@ -159,7 +163,11 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
             ).map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setFilter(key)}
+                type="button"
+                onClick={() => {
+                  setFilter(key);
+                  setExpandedName(null);
+                }}
                 className={`rounded-md border px-3 py-1 text-xs font-medium transition ${
                   filter === key
                     ? "border-violet-600 bg-violet-900/40 text-violet-200"
@@ -178,6 +186,7 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
                   <tr className={STICKY_TABLE_HEAD}>
                     <th className="px-3 py-2 font-semibold text-slate-400">Paciente</th>
                     <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Data alta</th>
+                    <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Filial</th>
                     <th className="px-3 py-2 font-semibold text-slate-400">Condição</th>
                     <th className="px-3 py-2 font-semibold text-slate-400 text-center">Alerta prévio</th>
                     <th className="px-3 py-2 font-semibold text-slate-400">Motivo alerta AURA</th>
@@ -188,7 +197,7 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
                   {filteredMatches.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-3 py-6 text-center text-slate-500"
                       >
                         Nenhum registro para este filtro.
@@ -217,8 +226,8 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
               )}
             </ScrollTable>
             <LazyLoadFooter
-              visibleCount={visibleCount}
-              totalCount={totalCount}
+              visibleCount={Math.min(visibleCount, filteredMatches.length)}
+              totalCount={analysis.totalReinternacoes}
               hasMore={hasMore}
               onLoadMore={loadMore}
             />
@@ -258,6 +267,9 @@ function MatchRow({
         </td>
         <td className="px-3 py-2 text-slate-300 whitespace-nowrap">
           {formatDate(match.reinternacaoDate)}
+        </td>
+        <td className="px-3 py-2 text-slate-400 whitespace-nowrap">
+          {match.filial ?? "—"}
         </td>
         <td className="px-3 py-2 text-slate-400 max-w-[160px] truncate">
           {match.conditionOnDischarge ?? "—"}
@@ -310,7 +322,7 @@ function MatchRow({
       </tr>
       {isExpanded && match.priorAlerts.length > 0 && (
         <tr className="bg-slate-900/60">
-          <td colSpan={6} className="px-4 py-3">
+          <td colSpan={7} className="px-4 py-3">
             <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
               Alertas AURA nos 10 dias anteriores à alta
             </p>

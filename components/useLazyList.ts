@@ -4,7 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const DEFAULT_BATCH = 30;
 
-export function useLazyList<T>(items: T[], batchSize = DEFAULT_BATCH) {
+export function useLazyList<T>(
+  items: T[],
+  batchSize = DEFAULT_BATCH,
+  resetKey?: string | number
+) {
   const [visibleCount, setVisibleCount] = useState(batchSize);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -12,7 +16,7 @@ export function useLazyList<T>(items: T[], batchSize = DEFAULT_BATCH) {
   useEffect(() => {
     setVisibleCount(batchSize);
     scrollRef.current?.scrollTo({ top: 0 });
-  }, [items, batchSize]);
+  }, [items, batchSize, resetKey]);
 
   const loadMore = useCallback(() => {
     setVisibleCount((current) => Math.min(current + batchSize, items.length));

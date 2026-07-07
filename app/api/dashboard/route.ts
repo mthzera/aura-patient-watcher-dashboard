@@ -50,13 +50,11 @@ export async function GET(request: NextRequest) {
       auraAlertSplit: calculateAuraAlertSplit(filtered),
       decompensation: calculateDecompensation(filtered),
       patientAlertRanking: calculatePatientAlertRanking(filtered),
-      // Reinternações × Aura segue APENAS o filtro de data (pela Data Alta da
-      // reinternação). Unidade/demais filtros não se aplicam aqui. A busca de
-      // alertas nos 10 dias anteriores usa todos os registros (rows).
-      reinternacaoAlertAnalysis: buildReinternacaoAlertAnalysis(rows, reinternacoes, {
-        startDate: filters.startDate,
-        endDate: filters.endDate,
-      }),
+      reinternacaoAlertAnalysis: buildReinternacaoAlertAnalysis(
+        rows,
+        reinternacoes,
+        filters
+      ),
       intercorrenciaAnalysis: buildIntercorrenciaAnalysis(rows, intercorrencias, {
         startDate: filters.startDate,
         endDate: filters.endDate,

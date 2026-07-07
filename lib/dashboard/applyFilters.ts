@@ -86,4 +86,4 @@ function matchesCaseInsensitive(
 }
 
 /** Exposed so other modules can reuse it. */
-export { parseDate };
+export { parseDate, matchesCaseInsensitive };
