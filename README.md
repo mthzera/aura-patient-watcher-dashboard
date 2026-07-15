@@ -63,7 +63,7 @@ In your App Registration, go to **Authentication** → **Add a platform** → **
 Add the redirect URI:
 
 ```
-http://localhost:3000/api/auth/callback/azure-ad
+http://localhost:5142/api/auth/callback/azure-ad
 ```
 
 For production, also add your production URL:
@@ -124,7 +124,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and click **"Entrar com Microsoft"**.
+Open [http://localhost:5142](http://localhost:5142) and click **"Entrar com Microsoft"**.
 
 ---
 

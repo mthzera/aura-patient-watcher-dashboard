@@ -1,4 +1,5 @@
 import { resolveClinicalAlteration } from "@/lib/data/normalizeClinicalAlteration";
+import { resolveBusinessUnit } from "@/lib/dashboard/businessUnit";
 import { PatientRecord, DashboardFilters } from "./types";
 
 /**
@@ -17,6 +18,13 @@ export function applyFilters(
         if (filters.startDate && recordDate < filters.startDate) return false;
         if (filters.endDate && recordDate > filters.endDate) return false;
       }
+    }
+
+    if (
+      filters.businessUnit &&
+      resolveBusinessUnit(r.unit) !== filters.businessUnit
+    ) {
+      return false;
     }
 
     if (

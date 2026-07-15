@@ -117,6 +117,7 @@ const EMPTY_METRICS: DashboardMetrics = {
 const EMPTY_FILTERS: ActiveFilters = {
   startDate: "",
   endDate: "",
+  businessUnit: "",
   unit: "",
   clinicalAlteration: "",
   clinicalOutcome: "",
@@ -148,6 +149,8 @@ export function DashboardClient() {
       const params = new URLSearchParams();
       if (currentFilters.startDate) params.set("startDate", currentFilters.startDate);
       if (currentFilters.endDate) params.set("endDate", currentFilters.endDate);
+      if (currentFilters.businessUnit)
+        params.set("businessUnit", currentFilters.businessUnit);
       if (currentFilters.unit) params.set("unit", currentFilters.unit);
       if (currentFilters.clinicalAlteration)
         params.set("clinicalAlteration", currentFilters.clinicalAlteration);
@@ -296,7 +299,7 @@ export function DashboardClient() {
         autoRefreshSeconds={REFRESH_SECONDS}
         dataSource={dataSource}
         filters={filters}
-        canExportPdf={!error && (data?.filteredRows ?? 0) > 0}
+        canExportPdf={!error && data != null}
       />
 
       <main className="mx-auto max-w-screen-2xl px-6 py-4 space-y-4">

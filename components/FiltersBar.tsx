@@ -2,11 +2,16 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { FiltersResponse } from "@/lib/dashboard/types";
+import type { BusinessUnit, FiltersResponse } from "@/lib/dashboard/types";
+import {
+  BUSINESS_UNIT_OPTIONS,
+  resolveBusinessUnit,
+} from "@/lib/dashboard/businessUnit";
 
 export interface ActiveFilters {
   startDate: string;
   endDate: string;
+  businessUnit: BusinessUnit | "";
   unit: string;
   clinicalAlteration: string;
   clinicalOutcome: string;
@@ -24,10 +29,23 @@ export function FiltersBar({ filters, filterOptions, onChange, onClear }: Props)
   const [isVisible, setIsVisible] = useState(true);
 
   function update(key: keyof ActiveFilters, value: string) {
+    if (key === "businessUnit") {
+      onChange({
+        ...filters,
+        businessUnit: value as BusinessUnit | "",
+        unit: "",
+      });
+      return;
+    }
     onChange({ ...filters, [key]: value });
   }
 
+  const availableUnits = (filterOptions?.units ?? []).filter(
+    (unit) => resolveBusinessUnit(unit) === filters.businessUnit
+  );
+
   const hasActiveFilters =
+    filters.businessUnit !== "" ||
     filters.unit !== "" ||
     filters.clinicalAlteration !== "" ||
     filters.clinicalOutcome !== "" ||
@@ -99,17 +117,27 @@ export function FiltersBar({ filters, filterOptions, onChange, onClear }: Props)
           />
         </div>
 
-        {/* Unit */}
+        {/* Business unit controls which care units are available. */}
         <SelectFilter
-          label="Unidade"
-          value={filters.unit}
-          options={(filterOptions?.units ?? []).map((u) => ({
-            value: u,
-            label: u,
-          }))}
-          onChange={(v) => update("unit", v)}
-          placeholder="Todas as unidades"
+          label="Unidade de negócio"
+          value={filters.businessUnit}
+          options={BUSINESS_UNIT_OPTIONS}
+          onChange={(v) => update("businessUnit", v)}
+          placeholder="Selecione"
         />
+
+        {filters.businessUnit && (
+          <SelectFilter
+            label="Unidade"
+            value={filters.unit}
+            options={availableUnits.map((unit) => ({
+              value: unit,
+              label: unit,
+            }))}
+            onChange={(v) => update("unit", v)}
+            placeholder="Todas desta unidade de negócio"
+          />
+        )}
 
         <SelectFilter
           label="Alteração clínica"
@@ -169,7 +197,9 @@ function SelectFilter({
 }: {
   label: string;
   value: string;
-  options: { value: string; label: string }[] | string[];
+  options:
+    | ReadonlyArray<{ value: string; label: string }>
+    | ReadonlyArray<string>;
   onChange: (v: string) => void;
   placeholder: string;
   hideBlankOption?: boolean;

@@ -157,6 +157,8 @@ export interface TemporalBucket {
   label: string;
   /** Total records in this bucket */
   total: number;
+  /** AURA alerts in this bucket (denominator for noReturnRate) */
+  auraAlerts: number;
   /** AURA alerts flagged sem retorno in this bucket */
   noReturn: number;
   /** No-return rate (% of AURA alerts in bucket) */
@@ -215,9 +217,12 @@ export interface TimeSeriesPoint {
 }
 
 /** Active filter state sent as query parameters to /api/dashboard */
+export type BusinessUnit = "domiciliar" | "transicao";
+
 export interface DashboardFilters {
   startDate?: string; // ISO date string YYYY-MM-DD
   endDate?: string;
+  businessUnit?: BusinessUnit;
   unit?: string;
   clinicalAlteration?: string;
   clinicalOutcome?: string;

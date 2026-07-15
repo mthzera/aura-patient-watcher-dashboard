@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { DashboardFilters, DashboardResponse } from "@/lib/dashboard/types";
+import { businessUnitLabel } from "@/lib/dashboard/businessUnit";
 
 const TEAL: [number, number, number] = [20, 184, 166];
 const SLATE_DARK: [number, number, number] = [15, 23, 42];
@@ -51,6 +52,9 @@ function filterSummary(filters: DashboardFilters): string[] {
   } else {
     lines.push("Período: todos os registros");
   }
+  lines.push(
+    `Unidade de negócio: ${businessUnitLabel(filters.businessUnit)}`
+  );
   lines.push(`Unidade: ${filters.unit || "Todas"}`);
   if (filters.clinicalAlteration) {
     lines.push(`Alteração clínica: ${filters.clinicalAlteration}`);

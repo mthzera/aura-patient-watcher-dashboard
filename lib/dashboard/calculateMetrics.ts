@@ -1059,6 +1059,7 @@ function makeBucket(label: string, recs: PatientRecord[]): TemporalBucket {
   return {
     label,
     total,
+    auraAlerts: auraTotal,
     noReturn,
     noReturnRate: pct(noReturn, auraTotal),
     effective,

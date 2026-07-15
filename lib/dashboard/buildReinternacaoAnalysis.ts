@@ -66,6 +66,7 @@ function nonDateFilters(
   if (!filters) return undefined;
   const { startDate: _s, endDate: _e, ...rest } = filters;
   const hasRest = !!(
+    rest.businessUnit ||
     rest.unit ||
     rest.clinicalAlteration ||
     rest.clinicalOutcome ||
@@ -85,13 +86,14 @@ function buildPatientScope(records: PatientRecord[]): Set<string> {
 
 function hasClinicalFilters(filters?: DashboardFilters): boolean {
   return !!(
+    filters?.businessUnit ||
     filters?.clinicalAlteration ||
     filters?.clinicalOutcome ||
     filters?.auraActionStatus
   );
 }
 
-/** Patient scope for clinical / outcome / atuação filters (and combos with unit). */
+/** Patient scope for business-unit / clinical filters (and combinations). */
 function getClinicalPatientScope(
   records: PatientRecord[],
   filters?: DashboardFilters
