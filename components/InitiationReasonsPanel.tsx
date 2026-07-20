@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type {
   AuraAlertSplitBreakdown,
   DesfechoBreakdown,
+  DiscussaoComiteBreakdown,
   NoReturnReasonsBreakdown,
   ReturnReasonsBreakdown,
 } from "@/lib/dashboard/types";
@@ -19,6 +20,8 @@ function pctOf(part: number | undefined | null, total: number): number {
   if (!total || part == null || !Number.isFinite(part)) return 0;
   return Math.round((part / total) * 100);
 }
+
+type CountBreakdown = Record<string, number> & { total: number };
 
 export function InitiationReasonsPanel({
   noReturnReasons,
@@ -57,7 +60,8 @@ export function InitiationReasonsPanel({
         <p className="text-xs text-slate-500 max-w-2xl">
           Cada alerta AURA teve retorno da unidade ou não — os dois grupos somam o
           total de alertas. Abaixo, o funil de cada grupo pela coluna &quot;Ação
-          Iniciação&quot; (e desfecho clínico nos retornos).
+          Iniciação&quot; (Aguda: Discussão do Comitê → Desfecho → Ação AURA;
+          Transitória: Desfecho → Ação AURA → Histórico).
         </p>
       </div>
 
@@ -130,7 +134,7 @@ function AuraSplitOverview({
   );
 }
 
-function DesfechoGroup({
+function BreakdownGroup({
   label,
   color,
   data,
@@ -139,9 +143,9 @@ function DesfechoGroup({
 }: {
   label: string;
   color: string;
-  data: DesfechoBreakdown;
+  data: CountBreakdown;
   total: number;
-  categories: { key: keyof Omit<DesfechoBreakdown, "total">; label: string }[];
+  categories: { key: string; label: string }[];
 }) {
   if (data.total === 0) return null;
   return (
@@ -154,7 +158,9 @@ function DesfechoGroup({
       {categories.map(({ key, label: catLabel }, i) => {
         const val = data[key] ?? 0;
         if (val === 0) return null;
-        const isLast = i === categories.length - 1 || categories.slice(i + 1).every(c => (data[c.key] ?? 0) === 0);
+        const isLast =
+          i === categories.length - 1 ||
+          categories.slice(i + 1).every((c) => (data[c.key] ?? 0) === 0);
         return (
           <TreeLine key={key} prefix={isLast ? "│  └─" : "│  ├─"} indent={1}>
             <span className="tabular-nums text-slate-200">{val}</span>{" "}
@@ -167,6 +173,17 @@ function DesfechoGroup({
   );
 }
 
+const EMPTY_COMITE: DiscussaoComiteBreakdown = {
+  total: 0,
+  monitoramento: 0,
+  naoMonitorado: 0,
+  reinternacaoEvitada: 0,
+  reinternacaoEvitavel: 0,
+  reinternacaoInevitavel: 0,
+  reversaoDeterioracao: 0,
+  semInformacao: 0,
+};
+
 const EMPTY_DESFECHO: DesfechoBreakdown = {
   total: 0, melhoraClinica: 0, condicaoBasal: 0, finitude: 0,
   reintercacao: 0, erroRegistro: 0, semRetorno: 0, semInformacao: 0,
@@ -177,12 +194,13 @@ function ReturnDistribution({
 }: {
   breakdown: ReturnReasonsBreakdown;
 }) {
-  const AGUDA_CATS: { key: keyof Omit<DesfechoBreakdown, "total">; label: string }[] = [
-    { key: "melhoraClinica", label: "Melhora clínica" },
-    { key: "finitude",       label: "Finitude" },
-    { key: "reintercacao",   label: "Reinternação" },
-    { key: "erroRegistro",   label: "Erro de registro" },
-    { key: "semInformacao",  label: "Sem informação" },
+  const AGUDA_CATS: { key: keyof Omit<DiscussaoComiteBreakdown, "total">; label: string }[] = [
+    { key: "reversaoDeterioracao", label: "Reversão de deterioração" },
+    { key: "reinternacaoEvitada", label: "Reinternação evitada" },
+    { key: "reinternacaoEvitavel", label: "Reinternação evitável" },
+    { key: "reinternacaoInevitavel", label: "Reinternação inevitável" },
+    { key: "monitoramento", label: "Monitoramento" },
+    { key: "naoMonitorado", label: "Não monitorado" },
   ];
 
   const ESPERADA_CATS: { key: keyof Omit<DesfechoBreakdown, "total">; label: string }[] = [
@@ -191,11 +209,10 @@ function ReturnDistribution({
     { key: "semRetorno",     label: "Sem retorno" },
     { key: "erroRegistro",   label: "Erro de registro" },
     { key: "finitude",       label: "Finitude" },
-    { key: "semInformacao",  label: "Sem informação" },
   ];
 
   const t = rr.totalWithReturn;
-  const aguda = rr.aguda ?? EMPTY_DESFECHO;
+  const aguda = rr.aguda ?? EMPTY_COMITE;
   const esperada = rr.esperada ?? EMPTY_DESFECHO;
   const outros = rr.outros ?? 0;
   const sumCheck = aguda.total + esperada.total + outros;
@@ -206,7 +223,8 @@ function ReturnDistribution({
         Alertas com retorno
       </h3>
       <p className="text-[10px] text-slate-500 mb-3">
-        Intervenção Unidade = Sim ou Reavaliação · {t} alertas.
+        Intervenção Unidade = Sim ou Reavaliação (sem retorno = Não) · {t}{" "}
+        alertas.
       </p>
 
       <div className="font-mono text-sm text-slate-300 space-y-1 leading-relaxed">
@@ -217,16 +235,16 @@ function ReturnDistribution({
           </span>
         </div>
 
-        <DesfechoGroup
-          label="Descompensação Aguda"
+        <BreakdownGroup
+          label="Descompensação Aguda · Discussão do Comitê"
           color="text-rose-300"
           data={aguda}
           total={t}
           categories={AGUDA_CATS}
         />
 
-        <DesfechoGroup
-          label="Transitória Esperada"
+        <BreakdownGroup
+          label="Transitória Esperada · Desfecho Clínico"
           color="text-amber-300"
           data={esperada}
           total={t}
@@ -243,7 +261,8 @@ function ReturnDistribution({
       </div>
 
       <p className="mt-3 text-[10px] text-slate-500 border-t border-violet-800/50 pt-2">
-        Desfecho Clínico por tipo de Alteração Clínica ·{" "}
+        Aguda = Comitê → Desfecho → Ação AURA · Transitória = Desfecho → Ação
+        AURA → Histórico ·{" "}
         {sumCheck === t
           ? `${aguda.total} + ${esperada.total} + ${outros} = ${t} ✓`
           : "verifique os dados"}

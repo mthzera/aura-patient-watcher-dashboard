@@ -134,7 +134,7 @@ export function ImprovementOpportunityPanel({ metrics, responsiveness }: Props) 
       {/* Action plan */}
       {(() => {
         const fixedItems = [
-          "Aumentar a adesão ao tablet: garantir que todos os pacientes monitorados tenham tablet disponível para registro de sinais vitais, viabilizando a geração dos alertas AURA.",
+          "Anery: aumentar o registro de SSVV para viabilizar a geração dos alertas AURA nos pacientes monitorados.",
           "Avaliar contatos com dificuldades nas ligações: identificar pacientes e familiares com baixa taxa de resposta e mapear barreiras (telefone errado, disponibilidade, etc.).",
           "Avaliar a régua / pertinência dos alertas: revisar os critérios de disparo para equilibrar sensibilidade e especificidade, reduzindo alertas de baixa prioridade sem perder casos críticos.",
         ];

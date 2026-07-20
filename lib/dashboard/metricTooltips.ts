@@ -2,27 +2,27 @@
 
 export const METRIC_TOOLTIPS = {
   return:
-    "A unidade registrou resposta à alteração clínica (qualquer valor em Ação AURA diferente de vazio ou “sem retorno”). Conta apenas alertas AURA.",
+    "Alertas AURA com Intervenção Unidade = Sim ou Reavaliação.",
   noReturn:
-    "Alerta AURA em que a unidade não registrou resposta (complemento dos alertas com retorno). Soma com “com retorno” = total de alertas AURA.",
+    "Alertas AURA com Intervenção Unidade = Não (ou Sem Retorno). Complemento dos alertas com retorno; a soma fecha o total de alertas AURA.",
   effectiveness:
     "Entre os casos com atuação documentada e desfecho clínico registrado, percentual que evoluiu com desfecho favorável (melhora, condição basal ou estabilização).",
   alertResponseRate:
-    "Alertas com retorno ÷ alertas AURA × 100. Mede quantos alertas receberam qualquer resposta da unidade.",
+    "Alertas com retorno ÷ alertas AURA × 100. Com retorno = Intervenção Unidade Sim ou Reavaliação.",
   funnelRecords:
     "Total de linhas no recorte filtrado da planilha.",
   funnelAuraAlerts:
     'Registros com coluna “Alertado AURA?” = Sim.',
   funnelAlertsWithReturn:
-    "Alertas AURA em que a unidade registrou resposta (não é “sem retorno”).",
+    "Alertas AURA com Intervenção Unidade = Sim ou Reavaliação.",
   funnelAlertsNoReturn:
-    "Alertas AURA sem resposta registrada na coluna Ação AURA.",
+    "Alertas AURA com Intervenção Unidade = Não (ou Sem Retorno).",
   funnelUnitActions:
     "Registros com atuação concreta documentada (reavaliação, intervenção, notificação etc.), excluindo “sem retorno”.",
   funnelOutcomes:
     "Alertas AURA com a coluna Desfecho Clínico preenchida (dentre os alertas do recorte, não em todos os registros).",
   alertResponseSuccess:
-    "Alertas em que a unidade registrou resposta na Ação AURA (não vazio e não “sem retorno”). Taxa = com retorno ÷ alertas AURA.",
+    "Alertas com Intervenção Unidade = Sim ou Reavaliação. Taxa = com retorno ÷ alertas AURA.",
   normalReturn:
     "Alertas AURA com retorno em que o desfecho ou resultado da intervenção indica quadro normal, basal ou estável.",
   dataMissingAuraFlag:

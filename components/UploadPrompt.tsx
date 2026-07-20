@@ -251,6 +251,7 @@ export function UploadPrompt({ onUploadSuccess, compact = false }: Props) {
                     "alertado_aura",
                     "atuacao_da_unidade",
                     "desfecho_clinico",
+                    "discussao_comite",
                   ].map((col) => (
                     <span
                       key={col}

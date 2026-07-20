@@ -9,6 +9,7 @@
  */
 
 import type {
+  BusinessUnit,
   PatientRecord,
   IntercorrenciaRecord,
   IntercorrenciaAnalysis,
@@ -18,13 +19,19 @@ import type {
   PriorAuraAlertForIntercorrencia,
 } from "./types";
 import { parseDate } from "./applyFilters";
+import { isAneryFilial } from "./unitFilialMap";
 
 const LOOKBACK_DAYS = 5;
 const TOP_N = 10;
 
-interface DateRange {
+interface IntercorrenciaScope {
   startDate?: string;
   endDate?: string;
+  /**
+   * Anery is the only Domiciliar unit — intercorrências apply to Domiciliar
+   * (and "Todos"). Hidden when Transição is selected.
+   */
+  businessUnit?: BusinessUnit;
 }
 
 function normalize(val: string | null | undefined): string {
@@ -126,16 +133,21 @@ const EMPTY: IntercorrenciaAnalysis = {
 export function buildIntercorrenciaAnalysis(
   records: PatientRecord[],
   intercorrencias: IntercorrenciaRecord[],
-  dateRange?: DateRange
+  scope?: IntercorrenciaScope
 ): IntercorrenciaAnalysis {
+  // Anery = única Domiciliar. Em Transição o painel não se aplica.
+  if (scope?.businessUnit === "transicao") return EMPTY;
+
   if (intercorrencias.length === 0) return EMPTY;
 
+  // Intercorrências: só Anery (Domiciliar). Visível em Domiciliar ou Todos.
   const scoped = intercorrencias.filter((r) => {
-    if (!dateRange?.startDate && !dateRange?.endDate) return true;
+    if (!isAneryFilial(r.filial)) return false;
+    if (!scope?.startDate && !scope?.endDate) return true;
     const d = parseDate(r.dataInicio);
     if (!d) return true;
-    if (dateRange.startDate && d < dateRange.startDate) return false;
-    if (dateRange.endDate && d > dateRange.endDate) return false;
+    if (scope.startDate && d < scope.startDate) return false;
+    if (scope.endDate && d > scope.endDate) return false;
     return true;
   });
 

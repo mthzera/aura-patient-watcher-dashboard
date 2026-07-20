@@ -74,6 +74,16 @@ export const COLUMN_MAP: Record<string, string> = {
   resultado_clinico: "clinical_outcome",
   outcome: "clinical_outcome",
 
+  // Committee discussion (used for Descompensação Aguda outcomes)
+  discussao_comite: "committee_discussion",
+  discussao_do_comite: "committee_discussion",
+  discussao_comite_aura: "committee_discussion",
+  discussao_do_comite_aura: "committee_discussion",
+  discussao_comit: "committee_discussion",
+  discussao_comiteaura: "committee_discussion",
+  discussao_do_comite_aura_aura: "committee_discussion",
+
+
   // NEWS2 scores
   news2_ultimo: "news2_score",
   news2: "news2_score",
@@ -108,6 +118,11 @@ export const COLUMN_MAP: Record<string, string> = {
 
   // Final monitoring status (Status column – distinct from aura_action_status)
   status: "monitoring_status",
+
+  // Intervention history (Histórico de Intervenção) — fallback for transitória
+  historico_de_intervencao: "intervention_history",
+  historico_intervencao: "intervention_history",
+  historico_da_intervencao: "intervention_history",
 
   // Additional optional fields
   observacoes: "observations",

@@ -54,6 +54,8 @@ export interface PatientRecord {
   aura_alerted: string | null;
   aura_action_status: string | null;
   clinical_outcome: string | null;
+  /** "Discussão Comitê" — outcome source for Descompensação Aguda */
+  committee_discussion: string | null;
   observations: string | null;
   responsible: string | null;
   /** "Data Alta" — discharge (or death) date, DD/MM/YYYY */
@@ -62,6 +64,8 @@ export interface PatientRecord {
   admission_date: string | null;
   /** "Resultado da Intervenção" — what the unit reported after acting */
   intervention_result: string | null;
+  /** "Histórico de Intervenção" — free-text follow-up (fallback for transitória) */
+  intervention_history: string | null;
   /** "Status" — final monitoring status (Reinternação, Óbito, Pcte Watcher …) */
   monitoring_status: string | null;
   /** "Ação Iniciação" — concrete action/reason text (used for no-return reasons) */
@@ -233,11 +237,43 @@ export interface DashboardFilters {
 // Reinternação alert cross-reference analysis
 // ---------------------------------------------------------------------------
 
+/** Kind of clinical alteration on a prior AURA alert. */
+export type ReinternacaoAlterationKind = "aguda" | "transitoria" | "outra";
+
+/**
+ * Why we did / did not act effectively for a reinternated patient who had
+ * a prior AURA alert (Alteração Clínica + Desfecho / Intervenção Unidade).
+ */
+export type ReinternacaoEffectivenessReason =
+  | "sem_retorno"
+  | "retorno_estavel"
+  | "paciente_mal"
+  | "retorno_bem_reinternou"
+  | "outros";
+
+export const EFFECTIVENESS_REASON_LABELS: Record<
+  ReinternacaoEffectivenessReason,
+  string
+> = {
+  sem_retorno: "Alerta emitido, sem retorno",
+  retorno_estavel: "Alerta emitido, retorno estável",
+  paciente_mal: "Alerta emitido, paciente mal",
+  retorno_bem_reinternou: "Retorno da unidade: paciente bem (reinternou)",
+  outros: "Outros / sem classificação",
+};
+
 /** A single AURA alert that preceded a discharge event of interest. */
 export interface PriorAlert {
   date: string;
   unit: string | null;
   clinicalAlteration: string | null;
+  clinicalOutcome: string | null;
+  interventionUnit: string | null;
+  interventionResult: string | null;
+  alterationKind: ReinternacaoAlterationKind;
+  /** True when Intervenção Unidade = Sim | Reavaliação. */
+  acted: boolean;
+  effectivenessReason: ReinternacaoEffectivenessReason;
   /** How many days before the discharge date this alert occurred (0 = same day). */
   daysBeforeReinternacao: number;
 }
@@ -252,10 +288,22 @@ export interface ReinternacaoAlertMatch {
   /** Unidade assistencial when present (Command Center). */
   unit: string | null;
   conditionOnDischarge: string | null;
+  /** True when filial/unit is Anery (SSVV/tablet messaging applies). */
+  isAnery: boolean;
   /** True if at least one AURA alert occurred within the 10 days prior. */
   hadPriorAlert: boolean;
-  /** All AURA alerts found within 10 days before discharge (sorted: oldest first). */
+  /** All AURA alerts found within 10 days before discharge (sorted: closest first). */
   priorAlerts: PriorAlert[];
+  /** Classification from the most recent prior alert (null if none). */
+  effectivenessReason: ReinternacaoEffectivenessReason | null;
+  acted: boolean | null;
+  alterationKind: ReinternacaoAlterationKind | null;
+}
+
+export interface ReinternacaoAlterationEffectiveness {
+  total: number;
+  acted: number;
+  notActed: number;
 }
 
 /** Aggregate analysis: which discharge events had a prior AURA committee notification. */
@@ -267,6 +315,17 @@ export interface ReinternacaoAlertAnalysis {
   withPriorAlert: number;
   /** Events without any AURA alert in the prior 10 days. */
   withoutPriorAlert: number;
+  /** Among withPriorAlert: how many we acted on vs not, and why. */
+  effectiveness: {
+    acted: number;
+    notActed: number;
+    byReason: Record<ReinternacaoEffectivenessReason, number>;
+    byAlteration: {
+      aguda: ReinternacaoAlterationEffectiveness;
+      transitoria: ReinternacaoAlterationEffectiveness;
+      outra: ReinternacaoAlterationEffectiveness;
+    };
+  };
   matches: ReinternacaoAlertMatch[];
 }
 
@@ -397,8 +456,7 @@ export interface NoReturnReasonsBreakdown {
 }
 
 /**
- * Desfecho Clínico counts for one Alteração Clínica group (Aguda or Esperada).
- * Categories vary per group but share the same shape for convenience.
+ * Desfecho Clínico counts (Transitória Esperada).
  */
 export interface DesfechoBreakdown {
   total: number;
@@ -411,13 +469,29 @@ export interface DesfechoBreakdown {
   semInformacao: number;
 }
 
+/**
+ * Discussão Comitê Aura counts (Descompensação Aguda).
+ * Values from the spreadsheet column "Discussão Comitê Aura".
+ */
+export interface DiscussaoComiteBreakdown {
+  total: number;
+  monitoramento: number;
+  naoMonitorado: number;
+  reinternacaoEvitada: number;
+  reinternacaoEvitavel: number;
+  reinternacaoInevitavel: number;
+  reversaoDeterioracao: number;
+  /** Blank / unrecognized value in Discussão Comitê Aura */
+  semInformacao: number;
+}
+
 /** Breakdown of AURA alerts com retorno (Intervenção Unidade = Sim | Reavaliação). */
 export interface ReturnReasonsBreakdown {
   available: boolean;
   totalWithReturn: number;
-  /** Records with "Descompensação Aguda" as Alteração Clínica */
-  aguda: DesfechoBreakdown;
-  /** Records with "Descompensação Transitória Esperada" as Alteração Clínica */
+  /** Descompensação Aguda — classified via Discussão Comitê Aura */
+  aguda: DiscussaoComiteBreakdown;
+  /** Descompensação Transitória Esperada — classified via Desfecho Clínico */
   esperada: DesfechoBreakdown;
   /** Com retorno but Alteração Clínica is blank or unrecognized */
   outros: number;

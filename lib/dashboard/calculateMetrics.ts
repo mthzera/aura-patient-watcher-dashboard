@@ -17,6 +17,7 @@ import {
   NoReturnReasonsBreakdown,
   ReturnReasonsBreakdown,
   DesfechoBreakdown,
+  DiscussaoComiteBreakdown,
   AuraAlertSplitBreakdown,
   DecompensationAnalysis,
   DecompCategory,
@@ -91,9 +92,26 @@ const MONITORING_OUTCOME_PHRASES = ["em monitoramento", "monitorando"];
  *
  * Adjust this list to match actual values in your spreadsheet.
  */
+/** Intervenção Unidade values that count as "com retorno". */
+function isInterventionReturn(unit: string): boolean {
+  return unit === "sim" || unit === "reavaliacao";
+}
+
+/**
+ * Intervenção Unidade values that count as "sem retorno"
+ * (Alertas sem retorno = Intervenção Unidade Não / Sem Retorno).
+ */
+function isInterventionNoReturn(unit: string): boolean {
+  if (!unit) return false;
+  if (unit === "nao" || unit === "n") return true;
+  return NO_RETURN_PHRASES.some((p) => unit.includes(p));
+}
+
 /**
  * Whether this alert had a unit intervention — primary source of truth is
- * the "Intervenção Unidade" column ("Sim" or "Reavaliação").
+ * the "Intervenção Unidade" column:
+ *   - Com retorno: "Sim" | "Reavaliação"
+ *   - Sem retorno: "Não" | "Sem Retorno" (and equivalents)
  *
  * Falls back to the old signals when the column is absent (legacy data):
  *   - clinical_outcome is non-empty, or
@@ -104,7 +122,10 @@ export function hasTriagem(record: PatientRecord): boolean {
 
   // Primary signal: Intervenção Unidade column present
   if (unit) {
-    return unit === "sim" || unit === "reavaliacao";
+    if (isInterventionReturn(unit)) return true;
+    if (isInterventionNoReturn(unit)) return false;
+    // Unknown non-empty value → treat as no return (keeps split closed)
+    return false;
   }
 
   // Fallback for records without the column
@@ -201,8 +222,9 @@ function isAuraAlertFlagMissing(record: PatientRecord): boolean {
 }
 
 /**
- * Alerta AURA sem retorno da unidade — complemento de hasTriagem entre alertas.
- * Garante: com retorno + sem retorno = total de alertas AURA.
+ * Alerta AURA sem retorno da unidade (Intervenção Unidade = Não / Sem Retorno).
+ * Complemento de hasTriagem entre alertas — garante:
+ * com retorno + sem retorno = total de alertas AURA.
  */
 export function isAuraAlertNoReturn(record: PatientRecord): boolean {
   return isAuraAlerted(record) && !hasTriagem(record);
@@ -524,31 +546,105 @@ export function calculateNoReturnReasons(
   };
 }
 
-/** Classify "Desfecho Clínico" for a Descompensação Aguda record. */
-function classifyDesfechoAguda(
-  outcome: string | null | undefined
-): keyof Omit<DesfechoBreakdown, "total"> {
-  const o = normalize(outcome);
-  if (!o) return "semInformacao";
-  if (o.includes("melhora")) return "melhoraClinica";
-  if (o.includes("finitude")) return "finitude";
-  if (o.includes("reinterc") || o.includes("reinternac")) return "reintercacao";
-  if (o.includes("erro")) return "erroRegistro";
-  return "semInformacao";
+/** Aguda categories from Discussão Comitê Aura (never "sem informação"). */
+type DiscussaoComiteCategory = Exclude<
+  keyof Omit<DiscussaoComiteBreakdown, "total">,
+  "semInformacao"
+>;
+
+/**
+ * Source for Aguda outcome:
+ *   1. Discussão Comitê Aura
+ *   2. Desfecho Clínico
+ *   3. Ação AURA
+ *   4. Histórico de Intervenção
+ */
+function agudaOutcomeSource(record: PatientRecord): string {
+  const candidates = [
+    record.committee_discussion,
+    record.clinical_outcome,
+    record.aura_action_status,
+    record.intervention_history as string | null | undefined,
+  ];
+  for (const c of candidates) {
+    if (normalize(c)) return String(c ?? "").trim();
+  }
+  return "";
 }
 
-/** Classify "Desfecho Clínico" for a Descompensação Transitória Esperada record. */
+/**
+ * Classify Aguda via Discussão Comitê Aura (or Desfecho Clínico fallback).
+ * Spreadsheet comitê values: MONITORAMENTO | Não monitorado |
+ * REINTERNAÇÃO EVITADA | EVITÁVEL | INEVITÁVEL | REVERSÃO DE DETERIORAÇÃO.
+ * Desfecho fallbacks are mapped into those same buckets — never "sem informação".
+ */
+function classifyDiscussaoComite(
+  value: string | null | undefined
+): DiscussaoComiteCategory | null {
+  const o = normalize(value);
+  if (!o) return null;
+
+  // Order matters: inevitável / evitável / evitada before generic reinternação
+  if (o.includes("inevitavel")) return "reinternacaoInevitavel";
+  if (o.includes("evitavel")) return "reinternacaoEvitavel";
+  if (o.includes("evitada")) return "reinternacaoEvitada";
+  if (o.includes("reversao") || o.includes("deterior")) {
+    return "reversaoDeterioracao";
+  }
+  if (o.includes("nao monitorado")) return "naoMonitorado";
+  if (o.includes("monitoramento") || o.includes("monitorando")) {
+    return "monitoramento";
+  }
+
+  // Desfecho Clínico fallbacks → buckets do comitê
+  if (
+    o.includes("estabiliz") ||
+    o.includes("melhora") ||
+    o.includes("basal")
+  ) {
+    return "reversaoDeterioracao";
+  }
+  if (o.includes("finitude") || o.includes("reintern")) {
+    return "reinternacaoInevitavel";
+  }
+
+  // Qualquer outro texto preenchido entra como monitoramento (nunca sem info)
+  return "monitoramento";
+}
+
+/**
+ * Source for Transitória outcome, in order:
+ *   1. Desfecho Clínico
+ *   2. Ação AURA (when desfecho is blank)
+ *   3. Histórico de Intervenção
+ */
+function transitoriaOutcomeSource(record: PatientRecord): string {
+  const candidates = [
+    record.clinical_outcome,
+    record.aura_action_status,
+    record.intervention_history as string | null | undefined,
+  ];
+  for (const c of candidates) {
+    if (normalize(c)) return String(c ?? "").trim();
+  }
+  return "";
+}
+
+/** Classify Transitória Esperada (Desfecho Clínico + fallbacks). */
 function classifyDesfechoEsperada(
   outcome: string | null | undefined
-): keyof Omit<DesfechoBreakdown, "total"> {
+): keyof Omit<DesfechoBreakdown, "total"> | null {
   const o = normalize(outcome);
-  if (!o) return "semInformacao";
+  if (!o) return null;
   if (o.includes("melhora") || o.includes("estabiliz")) return "melhoraClinica";
   if (o.includes("condicao basal") || o.includes("basal")) return "condicaoBasal";
+  if (o.includes("estavel") || o.includes("sem alteracao")) return "condicaoBasal";
   if (o.includes("sem retorno")) return "semRetorno";
   if (o.includes("erro")) return "erroRegistro";
   if (o.includes("finitude")) return "finitude";
-  return "semInformacao";
+  // Texto preenchido mas não mapeado — não usar "sem informação"
+  if (o.includes("reavaliad") || o.includes("efetiv")) return "melhoraClinica";
+  return "melhoraClinica";
 }
 
 function emptyDesfecho(): DesfechoBreakdown {
@@ -564,11 +660,26 @@ function emptyDesfecho(): DesfechoBreakdown {
   };
 }
 
+function emptyDiscussaoComite(): DiscussaoComiteBreakdown {
+  return {
+    total: 0,
+    monitoramento: 0,
+    naoMonitorado: 0,
+    reinternacaoEvitada: 0,
+    reinternacaoEvitavel: 0,
+    reinternacaoInevitavel: 0,
+    reversaoDeterioracao: 0,
+    semInformacao: 0,
+  };
+}
+
 /**
- * Distribuição de alertas AURA com retorno, classificados por Alteração Clínica
- * e Desfecho Clínico.
+ * Distribuição de alertas AURA com retorno, classificados por Alteração Clínica:
+ *   - Aguda → Discussão Comitê Aura (fallback: Desfecho Clínico)
+ *   - Transitória → Desfecho Clínico (fallback: Ação AURA → Histórico)
  *
  * "Com retorno" = Intervenção Unidade = "Sim" | "Reavaliação".
+ * "Sem retorno" = Intervenção Unidade = "Não" | "Sem Retorno".
  */
 export function calculateReturnReasons(
   records: PatientRecord[]
@@ -581,18 +692,30 @@ export function calculateReturnReasons(
     (r) => isAuraAlerted(r) && hasTriagem(r)
   );
 
-  const aguda = emptyDesfecho();
+  const aguda = emptyDiscussaoComite();
   const esperada = emptyDesfecho();
   let outros = 0;
 
   for (const r of withReturn) {
     const alt = normalize(r.clinical_alteration);
     if (alt.includes("aguda")) {
+      const category = classifyDiscussaoComite(agudaOutcomeSource(r));
+      if (!category) {
+        // Comitê e desfecho ambos vazios — não cria "sem informação" na aguda
+        outros++;
+        continue;
+      }
       aguda.total++;
-      aguda[classifyDesfechoAguda(r.clinical_outcome)]++;
+      aguda[category]++;
     } else if (alt.includes("transitoria") || alt.includes("esperada")) {
+      const category = classifyDesfechoEsperada(transitoriaOutcomeSource(r));
+      if (!category) {
+        // Sem desfecho/ação/histórico — não cria "sem informação"
+        outros++;
+        continue;
+      }
       esperada.total++;
-      esperada[classifyDesfechoEsperada(r.clinical_outcome)]++;
+      esperada[category]++;
     } else {
       outros++;
     }

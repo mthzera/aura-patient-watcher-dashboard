@@ -8,7 +8,6 @@ import { KpiCard } from "@/components/KpiCard";
 import { MetricTooltip } from "@/components/MetricTooltip";
 import { ClosedLoopPanel } from "@/components/ClosedLoopPanel";
 import { METRIC_TOOLTIPS } from "@/lib/dashboard/metricTooltips";
-import { ClinicalIndicatorsPanel } from "@/components/ClinicalIndicatorsPanel";
 import { PatientAlertRankingPanel } from "@/components/PatientAlertRankingPanel";
 import { InitiationReasonsPanel } from "@/components/InitiationReasonsPanel";
 import { UploadPrompt } from "@/components/UploadPrompt";
@@ -394,12 +393,14 @@ export function DashboardClient() {
               returnReasons={data.returnReasons}
               auraAlertSplit={data.auraAlertSplit}
             />
-            <ClinicalIndicatorsPanel decompensation={data.decompensation} />
             <PatientAlertRankingPanel ranking={data.patientAlertRanking} />
             <ReinternacaoAlertPanel
               analysis={data.reinternacaoAlertAnalysis}
             />
-            <IntercorrenciaPanel analysis={data.intercorrenciaAnalysis} />
+            {/* Anery = única Domiciliar: intercorrências só em Domiciliar ou Todos */}
+            {filters.businessUnit !== "transicao" && (
+              <IntercorrenciaPanel analysis={data.intercorrenciaAnalysis} />
+            )}
             <UnitManagementTable data={data.unitSummaries} />
             <TimeSeriesChart data={data.timeSeries} />
             <ImprovementOpportunityPanel

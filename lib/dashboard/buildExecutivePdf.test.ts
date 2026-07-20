@@ -50,6 +50,19 @@ function emptyDesfecho() {
   };
 }
 
+function emptyDiscussaoComite() {
+  return {
+    total: 0,
+    monitoramento: 0,
+    naoMonitorado: 0,
+    reinternacaoEvitada: 0,
+    reinternacaoEvitavel: 0,
+    reinternacaoInevitavel: 0,
+    reversaoDeterioracao: 0,
+    semInformacao: 0,
+  };
+}
+
 function emptyResponse(overrides: Partial<DashboardResponse> = {}): DashboardResponse {
   return {
     metrics: ZERO_METRICS,
@@ -72,6 +85,22 @@ function emptyResponse(overrides: Partial<DashboardResponse> = {}): DashboardRes
       totalReinternacoes: 0,
       withPriorAlert: 0,
       withoutPriorAlert: 0,
+      effectiveness: {
+        acted: 0,
+        notActed: 0,
+        byReason: {
+          sem_retorno: 0,
+          retorno_estavel: 0,
+          paciente_mal: 0,
+          retorno_bem_reinternou: 0,
+          outros: 0,
+        },
+        byAlteration: {
+          aguda: { total: 0, acted: 0, notActed: 0 },
+          transitoria: { total: 0, acted: 0, notActed: 0 },
+          outra: { total: 0, acted: 0, notActed: 0 },
+        },
+      },
       matches: [],
     },
     intercorrenciaAnalysis: {
@@ -101,7 +130,7 @@ function emptyResponse(overrides: Partial<DashboardResponse> = {}): DashboardRes
     returnReasons: {
       available: false,
       totalWithReturn: 0,
-      aguda: emptyDesfecho(),
+      aguda: emptyDiscussaoComite(),
       esperada: emptyDesfecho(),
       outros: 0,
     },

@@ -58,9 +58,10 @@ export function IntercorrenciaPanel({ analysis }: Props) {
               Intercorrências × Alertas AURA
             </h2>
             <p className="text-xs text-slate-500">
-              Importe a planilha de intercorrências (ex.: exportação Anery) para
+              Importe a planilha de intercorrências Anery (Domiciliar) para
               identificar padrões clínicos e cruzar quais pacientes intercorreram
-              nos 5 dias após um alerta AURA.
+              nos 5 dias após um alerta AURA. Visível em Domiciliar ou Todos —
+              oculta em Transição.
             </p>
           </div>
         </div>
@@ -84,7 +85,7 @@ export function IntercorrenciaPanel({ analysis }: Props) {
             Intercorrências × Alertas AURA
           </h2>
           <p className="text-xs text-slate-400 max-w-3xl leading-snug">
-            Análise de intercorrências clínicas: principais motivos, grau de
+            Intercorrências Anery (Domiciliar): principais motivos, grau de
             urgência, trajetória de desfecho e cruzamento com alertas AURA nos{" "}
             <strong className="text-slate-200">5 dias anteriores</strong> ao
             evento.

@@ -46,6 +46,7 @@ export async function loadDashboardResponse(
     intercorrenciaAnalysis: buildIntercorrenciaAnalysis(rows, intercorrencias, {
       startDate: filters.startDate,
       endDate: filters.endDate,
+      businessUnit: filters.businessUnit,
     }),
     totalRows: rows.length,
     filteredRows: filtered.length,

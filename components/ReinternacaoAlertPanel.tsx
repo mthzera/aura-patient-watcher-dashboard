@@ -14,9 +14,11 @@ import {
   STICKY_TABLE_HEAD,
 } from "@/components/LazyScrollTable";
 import { useLazyList } from "@/components/useLazyList";
-import type {
-  ReinternacaoAlertAnalysis,
-  ReinternacaoAlertMatch,
+import {
+  EFFECTIVENESS_REASON_LABELS,
+  type ReinternacaoAlertAnalysis,
+  type ReinternacaoAlertMatch,
+  type ReinternacaoEffectivenessReason,
 } from "@/lib/dashboard/types";
 
 interface Props {
@@ -50,6 +52,11 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
     loadMore,
   } = useLazyList(filteredMatches, 30, filter);
 
+  const aneryWithoutAlert = useMemo(
+    () => analysis.matches.filter((m) => !m.hadPriorAlert && m.isAnery).length,
+    [analysis.matches]
+  );
+
   if (!analysis.available) {
     return (
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-6">
@@ -75,6 +82,9 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
       ? Math.round((analysis.withPriorAlert / analysis.totalReinternacoes) * 100)
       : 0;
 
+  const eff = analysis.effectiveness;
+  const withAlert = analysis.withPriorAlert;
+
   return (
     <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 space-y-4">
       {/* Header */}
@@ -88,7 +98,8 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
             Para cada paciente com alta por reinternação ou óbito, verifica se
             o comitê emitiu algum alerta AURA nos{" "}
             <strong className="text-slate-200">10 dias anteriores</strong> ao
-            evento.
+            evento — e, quando houve alerta, se atuamos (Intervenção Unidade) e
+            qual foi o desfecho.
           </p>
         </div>
       </div>
@@ -124,6 +135,74 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
             />
           </div>
 
+          {/* Effectiveness among reinternados with prior alert */}
+          {withAlert > 0 && (
+            <div className="rounded-lg border border-violet-800/50 bg-violet-950/20 p-4 space-y-3">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-violet-300 mb-1">
+                  Efetividade nos reinternados com alerta
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Com base no alerta mais recente nos 10 dias: Intervenção
+                  Unidade + Alteração Clínica + Desfecho (Discussão do Comitê
+                  na aguda).
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <KpiBox
+                  label="Atuamos"
+                  value={`${eff.acted} (${pct(eff.acted, withAlert)}%)`}
+                  color="text-emerald-300"
+                  bg="bg-emerald-950/30 border-emerald-800/40"
+                />
+                <KpiBox
+                  label="Não atuamos"
+                  value={`${eff.notActed} (${pct(eff.notActed, withAlert)}%)`}
+                  color="text-amber-300"
+                  bg="bg-amber-950/30 border-amber-800/40"
+                />
+                <KpiBox
+                  label="Aguda"
+                  value={`${eff.byAlteration.aguda.acted}/${eff.byAlteration.aguda.total}`}
+                  color="text-rose-300"
+                  bg="bg-slate-900/50 border-slate-700"
+                  sub="atuamos / total"
+                />
+                <KpiBox
+                  label="Transitória"
+                  value={`${eff.byAlteration.transitoria.acted}/${eff.byAlteration.transitoria.total}`}
+                  color="text-amber-200"
+                  bg="bg-slate-900/50 border-slate-700"
+                  sub="atuamos / total"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                {(
+                  Object.keys(EFFECTIVENESS_REASON_LABELS) as ReinternacaoEffectivenessReason[]
+                ).map((key) => {
+                  const count = eff.byReason[key];
+                  if (count === 0) return null;
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-baseline justify-between gap-2 text-slate-400"
+                    >
+                      <span>{EFFECTIVENESS_REASON_LABELS[key]}</span>
+                      <span className="tabular-nums text-slate-200 font-semibold shrink-0">
+                        {count}{" "}
+                        <span className="text-slate-500 font-normal">
+                          ({pct(count, withAlert)}%)
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Context note */}
           <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-xs text-slate-400 leading-snug">
             {analysis.withPriorAlert > 0 ? (
@@ -131,23 +210,27 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
                 <strong className="text-emerald-300">{analysis.withPriorAlert}</strong>{" "}
                 paciente{analysis.withPriorAlert !== 1 ? "s" : ""} com alta por
                 reinternação/óbito já tinham sido identificados pelo comitê AURA
-                antes do evento —
-                isso demonstra que o alerta ocorreu oportunamente.{" "}
-                {analysis.withoutPriorAlert > 0 && (
+                antes do evento.{" "}
+                {aneryWithoutAlert > 0 && (
                   <>
-                    <strong className="text-amber-300">{analysis.withoutPriorAlert}</strong>{" "}
-                    tiveram alta sem alerta prévio registrado nos últimos 10 dias —
-                    justificativa: pacientes sem tablet disponível para registro de sinais vitais,
-                    o que impossibilitou a geração do alerta AURA.
+                    Em Anery,{" "}
+                    <strong className="text-amber-300">{aneryWithoutAlert}</strong>{" "}
+                    sem alerta prévio — possível ausência de registro de SSVV.
                   </>
                 )}
+              </>
+            ) : aneryWithoutAlert > 0 ? (
+              <>
+                Nenhum dos {analysis.totalReinternacoes} pacientes com alta por
+                reinternação/óbito tinha alerta AURA nos 10 dias anteriores. Em
+                Anery, a ausência de registro de SSVV pode impedir a geração do
+                alerta.
               </>
             ) : (
               <>
                 Nenhum dos {analysis.totalReinternacoes} pacientes com alta por
                 reinternação/óbito tinha alerta AURA registrado nos 10 dias
-                anteriores — justificativa: pacientes sem tablet disponível para
-                registro de sinais vitais, impossibilitando a geração do alerta AURA.
+                anteriores.
               </>
             )}
           </div>
@@ -190,6 +273,7 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
                     <th className="px-3 py-2 font-semibold text-slate-400">Condição</th>
                     <th className="px-3 py-2 font-semibold text-slate-400 text-center">Alerta prévio</th>
                     <th className="px-3 py-2 font-semibold text-slate-400">Motivo alerta AURA</th>
+                    <th className="px-3 py-2 font-semibold text-slate-400">Atuação</th>
                     <th className="px-3 py-2 w-8" />
                   </tr>
                 </thead>
@@ -197,7 +281,7 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
                   {filteredMatches.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="px-3 py-6 text-center text-slate-500"
                       >
                         Nenhum registro para este filtro.
@@ -252,6 +336,7 @@ function MatchRow({
   onToggle: () => void;
 }) {
   const alertReasons = getAlertReasons(match);
+  const showSsvv = !match.hadPriorAlert && match.isAnery;
 
   return (
     <>
@@ -292,13 +377,33 @@ function MatchRow({
             <span className="text-slate-300 line-clamp-2" title={alertReasons}>
               {alertReasons}
             </span>
-          ) : !match.hadPriorAlert ? (
+          ) : showSsvv ? (
             <span
               className="inline-flex items-center gap-1 text-slate-400 italic"
-              title="Paciente sem tablet disponível para registro de sinais vitais"
+              title="Paciente sem registro de SSVV (Anery)"
             >
               <span className="text-slate-500">📋</span>
-              Sem tablet para registro de sinais vitais
+              Sem registro de SSVV
+            </span>
+          ) : (
+            <span className="text-slate-600">—</span>
+          )}
+        </td>
+        <td className="px-3 py-2 max-w-[200px]">
+          {match.hadPriorAlert && match.effectivenessReason ? (
+            <span
+              className={`line-clamp-2 text-[11px] ${
+                match.acted === false
+                  ? "text-amber-300"
+                  : match.effectivenessReason === "retorno_bem_reinternou"
+                    ? "text-rose-300"
+                    : "text-slate-300"
+              }`}
+              title={EFFECTIVENESS_REASON_LABELS[match.effectivenessReason]}
+            >
+              {match.acted === false ? "Não atuamos" : "Atuamos"}
+              {" · "}
+              {EFFECTIVENESS_REASON_LABELS[match.effectivenessReason]}
             </span>
           ) : (
             <span className="text-slate-600">—</span>
@@ -322,7 +427,7 @@ function MatchRow({
       </tr>
       {isExpanded && match.priorAlerts.length > 0 && (
         <tr className="bg-slate-900/60">
-          <td colSpan={7} className="px-4 py-3">
+          <td colSpan={8} className="px-4 py-3">
             <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
               Alertas AURA nos 10 dias anteriores à alta
             </p>
@@ -330,7 +435,7 @@ function MatchRow({
               {match.priorAlerts.map((a, i) => (
                 <li
                   key={i}
-                  className="flex items-center gap-2 text-xs text-slate-300 border-l-2 border-emerald-600/50 pl-2"
+                  className="flex flex-wrap items-center gap-2 text-xs text-slate-300 border-l-2 border-emerald-600/50 pl-2"
                 >
                   <DaysChip days={a.daysBeforeReinternacao} />
                   <span className="text-slate-200 font-medium whitespace-nowrap">
@@ -346,10 +451,20 @@ function MatchRow({
                     <>
                       <span className="text-slate-600">·</span>
                       <span className="text-slate-500 italic">
-                        Motivo: {a.clinicalAlteration}
+                        {a.clinicalAlteration}
                       </span>
                     </>
                   )}
+                  <span className="text-slate-600">·</span>
+                  <span
+                    className={
+                      a.acted ? "text-emerald-400/90" : "text-amber-400/90"
+                    }
+                  >
+                    {a.acted ? "Atuamos" : "Não atuamos"}
+                    {" — "}
+                    {EFFECTIVENESS_REASON_LABELS[a.effectivenessReason]}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -397,12 +512,14 @@ function KpiBox({
   color,
   bg,
   icon,
+  sub,
 }: {
   label: string;
   value: string | number;
   color: string;
   bg: string;
   icon?: React.ReactNode;
+  sub?: string;
 }) {
   return (
     <div className={`rounded-lg border p-3 ${bg}`}>
@@ -413,8 +530,14 @@ function KpiBox({
         </span>
       </div>
       <div className={`text-xl font-bold tabular-nums ${color}`}>{value}</div>
+      {sub && <div className="text-[10px] text-slate-600 mt-0.5">{sub}</div>}
     </div>
   );
+}
+
+function pct(part: number, total: number): number {
+  if (!total) return 0;
+  return Math.round((part / total) * 100);
 }
 
 function formatDate(raw: string | null): string {

@@ -56,3 +56,20 @@ export function unitMatchesReinternacao(
   }
   return false;
 }
+
+const ANERY_ALIASES = ["ANERY", "ANERY SP", "AHC"];
+
+/** True when filial/unit belongs to Anery (domiciliar). */
+export function isAneryFilial(
+  filial: string | null | undefined,
+  unit?: string | null | undefined
+): boolean {
+  const candidates = [filial, unit].filter(Boolean) as string[];
+  for (const c of candidates) {
+    const n = normalizeFilial(c);
+    if (ANERY_ALIASES.some((a) => n.includes(normalizeFilial(a)))) {
+      return true;
+    }
+  }
+  return false;
+}

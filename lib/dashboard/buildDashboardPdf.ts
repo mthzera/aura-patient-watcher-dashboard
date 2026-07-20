@@ -253,14 +253,6 @@ function drawCover(state: DocState, meta: DashboardPdfMeta): void {
   state.y += 52;
 }
 
-function acuteOutcomeLabel(
-  outcome: "reverteu" | "nao_reverteu" | "monitoramento"
-): string {
-  if (outcome === "reverteu") return "Reverteu";
-  if (outcome === "monitoramento") return "Em monitoramento";
-  return "Não reverteu";
-}
-
 export function buildDashboardPdf(
   data: DashboardResponse,
   meta: DashboardPdfMeta
@@ -268,7 +260,6 @@ export function buildDashboardPdf(
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const state: DocState = { doc, y: MARGIN };
   const m = data.metrics;
-  const d = data.decompensation;
 
   drawCover(state, meta);
 
@@ -327,20 +318,25 @@ export function buildDashboardPdf(
 
     const rr = data.returnReasons;
     if (rr.available && rr.totalWithReturn > 0) {
-      paragraph(state, "Desfechos clínicos nos alertas com retorno — Descompensação Aguda:");
+      paragraph(
+        state,
+        "Discussão Comitê Aura nos alertas com retorno — Descompensação Aguda (fallback: Desfecho Clínico):"
+      );
       const ag = rr.aguda;
-      dataTable(state, ["Desfecho", "Qtd"], [
-        ["Melhora clínica", ag.melhoraClinica],
-        ["Condição basal", ag.condicaoBasal],
-        ["Finitude", ag.finitude],
-        ["Reinternação", ag.reintercacao],
-        ["Erro de registro", ag.erroRegistro],
-        ["Sem retorno", ag.semRetorno],
-        ["Sem informação", ag.semInformacao],
+      dataTable(state, ["Discussão Comitê Aura", "Qtd"], [
+        ["Reversão de deterioração", ag.reversaoDeterioracao],
+        ["Reinternação evitada", ag.reinternacaoEvitada],
+        ["Reinternação evitável", ag.reinternacaoEvitavel],
+        ["Reinternação inevitável", ag.reinternacaoInevitavel],
+        ["Monitoramento", ag.monitoramento],
+        ["Não monitorado", ag.naoMonitorado],
         ["Total aguda", ag.total],
       ]);
 
-      paragraph(state, "Descompensação Transitória Esperada:");
+      paragraph(
+        state,
+        "Descompensação Transitória Esperada (Desfecho; fallback Ação AURA / Histórico):"
+      );
       const es = rr.esperada;
       dataTable(state, ["Desfecho", "Qtd"], [
         ["Melhora clínica", es.melhoraClinica],
@@ -349,54 +345,9 @@ export function buildDashboardPdf(
         ["Reinternação", es.reintercacao],
         ["Erro de registro", es.erroRegistro],
         ["Sem retorno", es.semRetorno],
-        ["Sem informação", es.semInformacao],
         ["Total esperada", es.total],
       ]);
     }
-  }
-
-  // --- Clinical indicators ---
-  sectionTitle(state, "Indicadores clínicos de apoio");
-  paragraph(
-    state,
-    `Contagem por paciente-dia. Total no recorte: ${d.scopePatientDays} pacientes-dia.`
-  );
-  kpiGrid(state, [
-    { label: "Pacientes-dia no escopo", value: String(d.scopePatientDays) },
-    { label: "Com descompensação", value: String(d.decompensatedPatientDays) },
-    { label: "Transitória (total)", value: String(d.transientTotal), sub: `${d.transientEffectiveRate}% efetivas` },
-    { label: "Aguda (paciente-dia)", value: String(d.acuteTotal), sub: `${d.acuteUniquePatients} pacientes únicos` },
-    { label: "Reversões", value: String(d.deteriorationReversals) },
-    { label: "Reinternações evitadas", value: String(d.avoidedReadmissions) },
-  ]);
-
-  if (d.transient.length > 0) {
-    dataTable(
-      state,
-      ["Categoria transitória", "Pacientes-dia", "%"],
-      d.transient.map((c) => [c.label, c.patients, `${c.percent}%`])
-    );
-  }
-
-  const acuteDetails = d.acutePatientDetails.slice(0, MAX_LIST_ROWS);
-  if (acuteDetails.length > 0) {
-    paragraph(state, "Pacientes com descompensação aguda:");
-    dataTable(
-      state,
-      ["Paciente", "Unidade", "Dias", "Desfecho"],
-      acuteDetails.map((p) => [
-        p.patientName,
-        p.unit ?? "—",
-        p.days,
-        acuteOutcomeLabel(p.outcome),
-      ]),
-      {
-        footnote:
-          d.acutePatientDetails.length > MAX_LIST_ROWS
-            ? `Exibindo ${MAX_LIST_ROWS} de ${d.acutePatientDetails.length} pacientes.`
-            : undefined,
-      }
-    );
   }
 
   // --- Patient ranking ---
@@ -429,7 +380,28 @@ export function buildDashboardPdf(
       { label: "Total reinternações", value: String(rein.totalReinternacoes) },
       { label: "Com alerta AURA prévio (10d)", value: String(rein.withPriorAlert), sub: pct(rein.withPriorAlert, rein.totalReinternacoes) },
       { label: "Sem alerta prévio", value: String(rein.withoutPriorAlert), sub: pct(rein.withoutPriorAlert, rein.totalReinternacoes) },
+      { label: "Atuamos (c/ alerta)", value: String(rein.effectiveness.acted) },
+      { label: "Não atuamos (c/ alerta)", value: String(rein.effectiveness.notActed) },
     ]);
+
+    if (rein.withPriorAlert > 0) {
+      paragraph(state, "Motivos entre reinternados com alerta prévio:");
+      dataTable(state, ["Motivo", "Qtd"], [
+        ["Alerta sem retorno", rein.effectiveness.byReason.sem_retorno],
+        ["Retorno estável", rein.effectiveness.byReason.retorno_estavel],
+        ["Paciente mal", rein.effectiveness.byReason.paciente_mal],
+        ["Retorno bem (reinternou)", rein.effectiveness.byReason.retorno_bem_reinternou],
+        ["Outros", rein.effectiveness.byReason.outros],
+        [
+          "Aguda — atuamos / total",
+          `${rein.effectiveness.byAlteration.aguda.acted} / ${rein.effectiveness.byAlteration.aguda.total}`,
+        ],
+        [
+          "Transitória — atuamos / total",
+          `${rein.effectiveness.byAlteration.transitoria.acted} / ${rein.effectiveness.byAlteration.transitoria.total}`,
+        ],
+      ]);
+    }
 
     const rows = rein.matches.slice(0, MAX_LIST_ROWS);
     dataTable(
@@ -451,10 +423,10 @@ export function buildDashboardPdf(
     );
   }
 
-  // --- Intercorrências ---
+  // --- Intercorrências (Anery) ---
   const inter = data.intercorrenciaAnalysis;
   if (inter.available && inter.totalIntercorrencias > 0) {
-    sectionTitle(state, "Intercorrências × alertas AURA", AMBER);
+    sectionTitle(state, "Intercorrências Anery × alertas AURA", AMBER);
     kpiGrid(state, [
       { label: "Total intercorrências", value: String(inter.totalIntercorrencias) },
       { label: "Com alerta AURA prévio (5d)", value: String(inter.withPriorAlert), sub: pct(inter.withPriorAlert, inter.totalIntercorrencias) },
