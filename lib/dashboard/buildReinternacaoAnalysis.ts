@@ -36,8 +36,8 @@ function emptyEffectiveness(): ReinternacaoAlertAnalysis["effectiveness"] {
     byReason: {
       sem_retorno: 0,
       retorno_estavel: 0,
-      paciente_mal: 0,
-      retorno_bem_reinternou: 0,
+      retorno_desfavoravel: 0,
+      retorno_favoravel_reinternou: 0,
       outros: 0,
     },
     byAlteration: {
@@ -85,8 +85,35 @@ function isAltaCondition(conditionOnDischarge: string | null): boolean {
 }
 
 function isReinternacaoEvent(rein: ReinternacaoRecord): boolean {
+  // Command Center: rows always have Unidade
   if (rein.unit?.trim()) return true;
+  // Altas Anery: filter by Condição Alta (hospitalização / reinternação / óbito)
   return isAltaCondition(rein.conditionOnDischarge);
+}
+
+/** Display label for Motivo / condição — supports both spreadsheet layouts. */
+function displayCondition(rein: ReinternacaoRecord): string | null {
+  const motivo = rein.motivoTransferencia?.trim() || null;
+  const desfecho = rein.conditionOnDischarge?.trim() || null;
+  const situacao = rein.situacao?.trim() || null;
+  const evitavel = rein.reinternacaoClassificacao?.trim() || null;
+
+  // Command Center: "Motivo · Desfecho" when both exist
+  if (motivo && desfecho && motivo !== desfecho) {
+    return `${motivo} · ${desfecho}`;
+  }
+  if (motivo) return motivo;
+  if (desfecho) return desfecho;
+  if (situacao && evitavel) return `${situacao} · ${evitavel}`;
+  if (situacao) return situacao;
+  if (evitavel) return evitavel;
+
+  // Altas Anery fallbacks
+  return (
+    rein.motivoInclusao?.trim() ||
+    rein.status?.trim() ||
+    null
+  );
 }
 
 function nonDateFilters(
@@ -227,15 +254,15 @@ function classifyEffectiveness(
     combined.includes("obito") ||
     combined.includes("obit");
 
-  // Retorno "bem"/basal/melhora but patient still reinternated
+  // Retorno favorável (melhora/basal) mas reinternação posterior
   if (isWell && !isUnwell) {
-    return { acted: true, reason: "retorno_bem_reinternou", kind };
+    return { acted: true, reason: "retorno_favoravel_reinternou", kind };
   }
   if (isStable && !isUnwell) {
     return { acted: true, reason: "retorno_estavel", kind };
   }
   if (isUnwell) {
-    return { acted: true, reason: "paciente_mal", kind };
+    return { acted: true, reason: "retorno_desfavoravel", kind };
   }
   return { acted: true, reason: "outros", kind };
 }
@@ -346,7 +373,7 @@ export function buildReinternacaoAlertAnalysis(
       reinternacaoDate: rein.dischargeDate ?? "",
       filial: rein.filial,
       unit: rein.unit,
-      conditionOnDischarge: rein.conditionOnDischarge,
+      conditionOnDischarge: displayCondition(rein),
       isAnery: isAneryFilial(rein.filial, rein.unit),
       hadPriorAlert: priorAlerts.length > 0,
       priorAlerts,

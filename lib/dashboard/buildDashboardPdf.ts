@@ -389,8 +389,14 @@ export function buildDashboardPdf(
       dataTable(state, ["Motivo", "Qtd"], [
         ["Alerta sem retorno", rein.effectiveness.byReason.sem_retorno],
         ["Retorno estável", rein.effectiveness.byReason.retorno_estavel],
-        ["Paciente mal", rein.effectiveness.byReason.paciente_mal],
-        ["Retorno bem (reinternou)", rein.effectiveness.byReason.retorno_bem_reinternou],
+        [
+          "Retorno desfavorável",
+          rein.effectiveness.byReason.retorno_desfavoravel,
+        ],
+        [
+          "Retorno favorável (reinternação posterior)",
+          rein.effectiveness.byReason.retorno_favoravel_reinternou,
+        ],
         ["Outros", rein.effectiveness.byReason.outros],
         [
           "Aguda — atuamos / total",
@@ -406,7 +412,7 @@ export function buildDashboardPdf(
     const rows = rein.matches.slice(0, MAX_LIST_ROWS);
     dataTable(
       state,
-      ["Paciente", "Data", "Unidade", "Condição", "Alerta prévio"],
+      ["Paciente", "Data", "Unidade", "Motivo / condição", "Alerta prévio"],
       rows.map((r) => [
         r.patientName,
         fmtDate(r.reinternacaoDate),

@@ -3,7 +3,7 @@
  *
  * Supports two layouts (semicolon-separated):
  *   A) Altas Anery: Nome;…;Data Alta;Filial;Condição Alta;…
- *   B) Command Center: Unidade;Convênio;Nome;…;Data da Reinternação;Desfecho;…
+ *   B) Command Center: Unidade;…;Data da Reinternação;Motivo da Transferência;Desfecho;…
  */
 
 import * as XLSX from "xlsx";
@@ -60,7 +60,6 @@ function normalizeKey(raw: string): string {
 const COL: Record<string, string> = {
   nome: "patientName",
   status: "status",
-  situacao: "status",
   operadora: "operadora",
   convenio: "operadora",
   motivo_da_inclusao: "motivoInclusao",
@@ -75,7 +74,19 @@ const COL: Record<string, string> = {
   filial: "filial",
   unidade: "unit",
   condicao_alta: "conditionOnDischarge",
+  condicao_da_alta: "conditionOnDischarge",
+  condicao: "conditionOnDischarge",
   desfecho: "conditionOnDischarge",
+  desfecho_alta: "conditionOnDischarge",
+  situacao_alta: "conditionOnDischarge",
+  // Command Center — prefer these when building display condition
+  motivo_da_transferencia: "motivoTransferencia",
+  motivo_transferencia: "motivoTransferencia",
+  causa_principal_da_reinternacao: "causaPrincipal",
+  causa_principal: "causaPrincipal",
+  situacao: "situacao",
+  classificacao: "classificacao",
+  reinternacao: "reinternacaoClassificacao",
   id_paciente: "idPaciente",
   id_carteira: "idCarteira",
   nro_atend: "nroAtend",
@@ -142,6 +153,11 @@ export function parseReinternacoesBuffer(buffer: Buffer): ReinternacaoRecord[] {
       filial: r.filial,
       unit: r.unit,
       conditionOnDischarge: r.conditionOnDischarge,
+      motivoTransferencia: r.motivoTransferencia ?? null,
+      causaPrincipal: r.causaPrincipal ?? null,
+      situacao: r.situacao ?? null,
+      classificacao: r.classificacao ?? null,
+      reinternacaoClassificacao: r.reinternacaoClassificacao ?? null,
       idPaciente: r.idPaciente,
       nroAtend: r.nroAtend,
     }));

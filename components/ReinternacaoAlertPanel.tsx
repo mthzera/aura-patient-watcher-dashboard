@@ -67,9 +67,9 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
               Reinternações × Alertas AURA
             </h2>
             <p className="text-xs text-slate-500">
-              Importe o arquivo de reinternações para cruzar quais pacientes
-              tiveram alta por reinternação/óbito e se havia alerta do comitê
-              nos 10 dias anteriores.
+              Importe a planilha de reinternações (Command Center ou altas
+              Anery) para cruzar quais pacientes tiveram reinternação/óbito e se
+              havia alerta do comitê nos 10 dias anteriores.
             </p>
           </div>
         </div>
@@ -270,7 +270,9 @@ export function ReinternacaoAlertPanel({ analysis }: Props) {
                     <th className="px-3 py-2 font-semibold text-slate-400">Paciente</th>
                     <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Data alta</th>
                     <th className="px-3 py-2 font-semibold text-slate-400 whitespace-nowrap">Unidade</th>
-                    <th className="px-3 py-2 font-semibold text-slate-400">Condição</th>
+                    <th className="px-3 py-2 font-semibold text-slate-400">
+                      Motivo / condição
+                    </th>
                     <th className="px-3 py-2 font-semibold text-slate-400 text-center">Alerta prévio</th>
                     <th className="px-3 py-2 font-semibold text-slate-400">Motivo alerta AURA</th>
                     <th className="px-3 py-2 font-semibold text-slate-400">Atuação</th>
@@ -395,7 +397,7 @@ function MatchRow({
               className={`line-clamp-2 text-[11px] ${
                 match.acted === false
                   ? "text-amber-300"
-                  : match.effectivenessReason === "retorno_bem_reinternou"
+                  : match.effectivenessReason === "retorno_favoravel_reinternou"
                     ? "text-rose-300"
                     : "text-slate-300"
               }`}
@@ -484,7 +486,12 @@ function getAlertReasons(match: ReinternacaoAlertMatch): string {
     )
   );
 
-  if (reasons.length === 0) return "";
+  if (reasons.length === 0) {
+    if (match.hadPriorAlert && match.effectivenessReason) {
+      return EFFECTIVENESS_REASON_LABELS[match.effectivenessReason];
+    }
+    return "";
+  }
   if (reasons.length <= 2) return reasons.join(" · ");
   return `${reasons.slice(0, 2).join(" · ")} +${reasons.length - 2}`;
 }

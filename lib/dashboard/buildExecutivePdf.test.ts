@@ -91,8 +91,8 @@ function emptyResponse(overrides: Partial<DashboardResponse> = {}): DashboardRes
         byReason: {
           sem_retorno: 0,
           retorno_estavel: 0,
-          paciente_mal: 0,
-          retorno_bem_reinternou: 0,
+          retorno_desfavoravel: 0,
+          retorno_favoravel_reinternou: 0,
           outros: 0,
         },
         byAlteration: {

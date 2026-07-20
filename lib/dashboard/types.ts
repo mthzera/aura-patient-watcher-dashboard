@@ -37,6 +37,16 @@ export interface ReinternacaoRecord {
   unit: string | null;
   /** "Condição Alta" / "Desfecho" */
   conditionOnDischarge: string | null;
+  /** "Motivo da Transferência" (Command Center) */
+  motivoTransferencia: string | null;
+  /** "Causa principal da reinternação" (Command Center) */
+  causaPrincipal: string | null;
+  /** "Situação" — Clínica / Social / Eletiva (Command Center) */
+  situacao: string | null;
+  /** "Classificação" (Command Center) */
+  classificacao: string | null;
+  /** "Reinternação" — Evitável / Não Evitável (Command Center) */
+  reinternacaoClassificacao: string | null;
   /** "ID Paciente" */
   idPaciente: string | null;
   /** "Nro Atend" */
@@ -247,19 +257,20 @@ export type ReinternacaoAlterationKind = "aguda" | "transitoria" | "outra";
 export type ReinternacaoEffectivenessReason =
   | "sem_retorno"
   | "retorno_estavel"
-  | "paciente_mal"
-  | "retorno_bem_reinternou"
+  | "retorno_desfavoravel"
+  | "retorno_favoravel_reinternou"
   | "outros";
 
 export const EFFECTIVENESS_REASON_LABELS: Record<
   ReinternacaoEffectivenessReason,
   string
 > = {
-  sem_retorno: "Alerta emitido, sem retorno",
-  retorno_estavel: "Alerta emitido, retorno estável",
-  paciente_mal: "Alerta emitido, paciente mal",
-  retorno_bem_reinternou: "Retorno da unidade: paciente bem (reinternou)",
-  outros: "Outros / sem classificação",
+  sem_retorno: "Alerta emitido sem retorno da unidade",
+  retorno_estavel: "Alerta emitido com retorno estável",
+  retorno_desfavoravel: "Alerta emitido com retorno desfavorável",
+  retorno_favoravel_reinternou:
+    "Alerta emitido com retorno favorável (reinternação posterior)",
+  outros: "Demais situações",
 };
 
 /** A single AURA alert that preceded a discharge event of interest. */
