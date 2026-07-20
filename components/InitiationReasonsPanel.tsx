@@ -21,7 +21,10 @@ function pctOf(part: number | undefined | null, total: number): number {
   return Math.round((part / total) * 100);
 }
 
-type CountBreakdown = Record<string, number> & { total: number };
+function countAt(data: object, key: string): number {
+  const value = (data as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
 
 export function InitiationReasonsPanel({
   noReturnReasons,
@@ -143,7 +146,7 @@ function BreakdownGroup({
 }: {
   label: string;
   color: string;
-  data: CountBreakdown;
+  data: { total: number };
   total: number;
   categories: { key: string; label: string }[];
 }) {
@@ -156,11 +159,11 @@ function BreakdownGroup({
         <span className="text-slate-500">({pctOf(data.total, total)}%)</span>
       </TreeLine>
       {categories.map(({ key, label: catLabel }, i) => {
-        const val = data[key] ?? 0;
+        const val = countAt(data, key);
         if (val === 0) return null;
         const isLast =
           i === categories.length - 1 ||
-          categories.slice(i + 1).every((c) => (data[c.key] ?? 0) === 0);
+          categories.slice(i + 1).every((c) => countAt(data, c.key) === 0);
         return (
           <TreeLine key={key} prefix={isLast ? "│  └─" : "│  ├─"} indent={1}>
             <span className="tabular-nums text-slate-200">{val}</span>{" "}
